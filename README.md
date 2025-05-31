@@ -5,7 +5,7 @@ Questo progetto analizza un dattaset di 999 pazienti affetti da cancro coloretta
 
 
 
-##------------------ per eseguire il codice in RStudio 
+## ------------------ per eseguire il codice in RStudio 
 
 Caricamento delle librerie utilizzate nel progetto
 * library(glmnet)
@@ -56,7 +56,7 @@ lapply(packages, install_if_missing)
 - Graphical outputs: Kaplan-Meier plots, clustering visualizations, correlation heatmaps
 - Model summaries and performance reports, analyzed in my report if needed
 
----
 
--------------------------  Citation
+
+# -------------------------  Citation
 Chang, Y.C., et al. (2018). "The effect of epidural analgesia on cancer progression in patients with stage IV colorectal cancer after primary tumor resection: A retrospective cohort study." PLoS ONE 13(7): e0200893.
