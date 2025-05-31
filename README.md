@@ -1,11 +1,11 @@
 # Colorectal-Cancer---EHR-analysis
 
-## ------------------ DESCRIZIONE PROGETTO
+## DESCRIZIONE PROGETTO
 Questo progetto analizza un dattaset di 999 pazienti affetti da cancro colorettale in stadio IV. Sono stati applicati metodi di machine learning supervisionato, modelli di sopravvivenza (Cox, Aalen), clustering (UMAP, t-SNE, k-means, HAC) e visualizzazioni per identificare fattori clinici e perioperatori associati alla sopravvivenza.
 
 
 
-## ------------------ per eseguire il codice in RStudio 
+##  per eseguire il codice in RStudio 
 
 Caricamento delle librerie utilizzate nel progetto
 * library(glmnet)
@@ -51,12 +51,12 @@ lapply(packages, install_if_missing)
 - pacman = Facilita il caricamento e installazione di più pacchetti con un unico comando.
 
 
-## ------------------------- OUTPUT
+##   OUTPUT
 - `output_dataset.csv`: Cleaned dataset ready for analysis
 - Graphical outputs: Kaplan-Meier plots, clustering visualizations, correlation heatmaps
 - Model summaries and performance reports, analyzed in my report if needed
 
 
 
-# -------------------------  Citation
+#  Citation
 Chang, Y.C., et al. (2018). "The effect of epidural analgesia on cancer progression in patients with stage IV colorectal cancer after primary tumor resection: A retrospective cohort study." PLoS ONE 13(7): e0200893.
