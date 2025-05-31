@@ -1,0 +1,2714 @@
+---
+title: "PROJECT - DPSS"
+author: "Alice Brunazzi"
+date: "2025-05-02"
+output:
+  word_document: default
+  html_document: default
+---
+
+# ANALISI
+
+```{r}
+library(skimr)
+```
+
+```{r, error=TRUE}
+
+library(readxl)
+data <- read_excel("C:/Users/Utente/Downloads/pone.0200893.s001.xls", 
+    col_types = c("skip", "numeric", "text", 
+        "text", "numeric", "numeric", "numeric", 
+        "numeric", "numeric", "numeric", 
+        "numeric", "numeric", "numeric", 
+        "numeric", "numeric", "numeric", 
+        "numeric", "numeric", "text", "numeric", 
+        "numeric", "numeric", "numeric", 
+        "numeric", "numeric", "numeric", 
+        "numeric", "numeric", "numeric", 
+        "numeric", "numeric", "numeric"))
+#View(pone_0200893_s001)
+skimr::skim_without_charts(data)
+colnames(data)
+```
+
+VARIABILI DEMOGRAFICHE E CLINICHE: etá, genere, ASA, comorbiditá tipo: diabete, malattie cardio vascolari, insufficenza renale VARIABILI TUMORALI: CEA, localizzazione, grading, tipo istologico (mucinoso, a cellule ad anello con castone) , invasione linfovascolare e perineurale.\
+VARIAVILI TRATTAMENTO: tipo di intervento (laparoscopico, anestesia epidurale), tempo di anestesia, trasfusioni RBC, chemioterapia CT, radioterapia RT e terapia neoadiuvante NACTRT TARGE: morte, progressione, tempi di followup (interval e intervalR)
+
+| **Variabile**            | **Descrizione**                                                                 |
+|------------------|-----------------------------------------------------|
+|                          |                                                                                 |
+| `Age`                    | Età del paziente (in anni)                                                      |
+| `Gender`                 | Sesso del paziente (`Male`, `Female`)                                           |
+| `ASA`                    | Classificazione ASA fisica pre-operatoria (da 1 a 5)                            |
+| `ASA3`                   | Indicatore binario: ASA ≥ 3 (`1` = grave compromissione, `0` = no)              |
+| `DM`                     | Diabete mellito (`1` = presente, `0` = assente)                                 |
+| `CAD`                    | Cardiopatia ischemica (Coronary Artery Disease)                                 |
+| `HF`                     | Insufficienza cardiaca (Heart Failure)                                          |
+| `CVA`                    | Ictus (Cerebrovascular Accident)                                                |
+| `CKD`                    | Malattia renale cronica (Chronic Kidney Disease)                                |
+| `CEA`                    | Valore dell'antigene carcinoembrionario (marker tumorale)                       |
+| `LogCEA`                 | Logaritmo naturale del CEA (per normalizzazione)                                |
+| `Laparoscopic`           | Intervento laparoscopico (`1` = sì, `0` = no)                                   |
+| `TumorLOC`               | Localizzazione del tumore (`0` = colon, `1` = retto)                            |
+| `EA`                     | Uso di anestesia epidurale (`1` = sì, `0` = no)                                 |
+| `AnesTime`               | Durata dell'anestesia (in minuti)                                               |
+| `AnesTime`                 | Logaritmo in base 2 della durata dell'anestesia                                 |
+| `RBC`                    | Numero di unità di sangue trasfuse durante l'intervento                         |
+| `AJCC`                   | Stadio AJCC del tumore (tipicamente `IV`)                                       |
+| `Liver_Only`             | Metastasi limitate al fegato (`1` = sì, `0` = no)                               |
+| `Cell_diff`              | Grado di differenziazione cellulare (1 = ben differenziato, 2 = moderato, ecc.) |
+| `Mucin_TYPE`             | Tipo mucinoso del tumore (`1` = presente, `0` = no)                             |
+| `SignetRING`             | Istotipo a cellule ad anello con castone (`1` = sì, `0` = no)                   |
+| `Lymphovascularinvasion` | Invasione linfovascolare (`1` = presente)                                       |
+| `perineural`             | Invasione perineurale (`1` = presente)                                          |
+| `CT`                     | Chemioterapia post-operatoria (`1` = sì, `0` = no)                              |
+| `RT`                     | Radioterapia post-operatoria (`1` = sì, `0` = no)                               |
+| `NACTRT`                 | Terapia neoadiuvante (radio o chemio prima dell'intervento)                     |
+| `Death`                  | Evento morte durante il follow-up (`1` = morto, `0` = vivo)                     |
+| `Interval`               | Tempo in mesi fino alla morte o censura                                         |
+| `Progress`               | Progressione del tumore (`1` = sì, `0` = no)                                    |
+| `IntervalR`              | Tempo in mesi fino alla progressione o censura                                  |
+
+# PREPROCESSING:
+
+## 0. INTERVALS
+
+```{r, error=TRUE}
+cor(data$Interval, data$IntervalR, use="complete.obs")
+
+data$IntervalOD<- data$Interval
+data$Interval <- NULL
+
+data$IntervalOR <- data$IntervalR
+data$IntervalR <- NULL
+
+colnames(data)
+```
+
+## 1. ASA
+
+indica, rispettivamente, i pazienti sani= 0, lievemente malati =1, gravi ma non a rischio di morte = 3, con rischio costante di morte = 4 e morente =5. ASA3, invece, binarizza la variabile, mostrando come 0 i pazienti a rischio accettbaile e 1 i pazienti a rischio grave.
+
+SI TEME MULTICOLLINEARITÁ IN SECONDO MOMENTO.
+
+Si plottano gli istogrammi al fine di vedere quale variabile possa essere piu informativa.
+
+Prima della verifica, serve controllare che la variabile ASA3 non contenga errori.
+
+```{r, error=TRUE}
+# CONVERSIONE ASA
+
+str(data$ASA)
+
+data$ASA_num <- as.numeric(as.character(data$ASA))
+
+# Step 2: Creazione manuale della variabile ASA3 (gold standard)
+data$ASA3_check <- ifelse(data$ASA_num >= 3, 1, 0)
+
+# Step 3: Confronto  tra ASA3 originale e ASA3 calcolato
+table(Originale = data$ASA3, Calcolato = data$ASA3_check)
+
+```
+
+Il valore 387 corrisponde con quello della documentazione fornita. Si testa per multicollinearitá controllando la correlazione tra variabili. Letteratura suggerisce non piú di 0.7
+
+```{r, error=TRUE}
+cor(data$ASA_num, data$ASA3)
+
+
+model <- lm(data$Death ~ ASA_num + ASA3, data = data)
+car::vif(model)
+
+```
+
+La correlazione mostra conferma per multicollinearitá, molto alta. DECISIONE: non tenerle entrambe
+
+Il variance index inflator non aiuta nella decisione su quale rimuovere. Si onfronta AIC dei modelli fittati sulle variabili per verificare quale tenere.
+
+```{r, error=TRUE}
+# Modelli a confronto
+model1 <- glm(Death ~ ASA_num, data = data, family = "binomial")
+model2 <- glm(Death ~ ASA3, data = data, family = "binomial")
+
+AIC(model1, model2)  # Confronta la bontà del fit
+
+```
+
+AIC più basso per ASA3 -\> miglior fit, anche se la differenza è modesta (ΔAIC \> 2 è comunque considerata significativa, in questo caso é -3.14).
+
+```{r, error=TRUE}
+# Rimozione della variabile ASA_num e ASA non modificata
+data$ASA_num <- NULL
+data$ASA3_check <- NULL
+data$ASA <- NULL
+```
+
+```{r, error=TRUE}
+cat("Numero di record nel dataset:", nrow(data), "\n")
+```
+
+##2- Cell_Diff
+
+VARIABILE GRADO DI DIFFERENZIAZIONE CELLULARE
+
+Le convenzioni standard di classificazione istologica danno alla variabile valori 1= ben differenziato, 2= non differenziato
+
+```{r, error=TRUE}
+hist(data$Cell_diff)
+```
+
+La variabile presenta dei valori non previsti nella scala 1-2, si provvede a verificarli manualmente e poi graficamente
+
+```{r, error=TRUE}
+
+sum(data$Cell_diff == 0, na.rm = TRUE)
+
+record_zero_diff <- data[!is.na(data$Cell_diff) & data$Cell_diff == 0, ]
+
+record_zero_diff
+
+```
+
+I record problematici snon solo 10, sono sicuramente mal codificati e/ o danneggiati. Si reputa che la la loro eliminazione non comprometta l éfficacia statistica. si poteva imputare i 10 record nulli alla variabile 1 ma dato il numero quali nullo di records, l'eliminazione non impatta sulla variabile. La media e la sd corrispondono a quella fornita dalla documentazione
+
+```{r, error=TRUE}
+data <- data[!(data$Cell_diff == 0 | is.na(data$Cell_diff)), ]
+hist(data$Cell_diff)
+```
+
+```{r, error=TRUE}
+sum(data$Cell_diff > 1.5)
+sum(data$Cell_diff < 1.5)
+```
+
+```{r, error=TRUE}
+cat("Numero di record nel dataset:", nrow(data), "\n")
+```
+
+Che corrispondono con i 121 (non differenziati) record e gli 823 (differeniati) nella documentazione riportata
+
+## 3 - Binary
+
+Si verificano tutte le variabili binarie (codificate 0 No 1 si) per verificare se presentano valori fuori dal range.
+
+```{r, error=TRUE}
+
+binary_vars <- c("DM", "CAD", "HF", "CVA", "CKD", "Laparoscopic", "EA",
+                 "Liver_Only", "Lymphovascularinvasion", "perineural",
+                 "CT", "RT", "NACTRT", "Death", "Progress")
+
+# VALORI UNICI, DEVONO ESSERE 0 E 1
+for (var in binary_vars) {
+  cat("\nVariabile:", var, "\n")
+  print(unique(data[[var]]))
+}
+
+```
+
+Si nota che Perineural contine NA, si procede alla verifica
+
+```{r, error=TRUE}
+# Mostra tutti i record dove perineural è NA
+subset(data, is.na(perineural))
+
+```
+
+```{r, error=TRUE}
+data <- data[!is.na(data$perineural), ]
+unique(data$perineural)
+```
+
+```{r, error=TRUE}
+cat("Numero di record nel dataset:", nrow(data), "\n")
+```
+
+## 4- Gender
+
+```{r, error=TRUE}
+data$Gender <- as.numeric(as.character(data$Gender))
+```
+
+```{r, error=TRUE}
+cat("Numero di record nel dataset:", nrow(data), "\n")
+```
+
+## 5- CEA
+
+La variabile CEA contiene missing values 15, e di conseguenza LogCEA
+
+```{r, error=TRUE}
+summary(data$CEA)
+plot(data$CEA)
+```
+
+Essendo una variabile di profondo senso cliico (valore del'carcigene \~ marker tumorale), si procede in ordine: 1- scelta della variabile da tenere tra CEA e Log CEA, 2- VALUTARE SE imputare O eliminare dei valori mancanti
+
+Si inizia controllando che LogCEA corrisponda al Logaritmo di CEA, senza errori
+
+```{r, error=TRUE}
+# 1. logaritmo naturale di (CEA + 1) — standard
+mean(log(data$CEA + 1), na.rm = TRUE)
+
+# 2. logaritmo naturale 
+mean(log(data$CEA), na.rm = TRUE)
+
+# 3. logaritmo in base 10
+mean(log10(data$CEA), na.rm = TRUE)
+
+# 4. logaritmo in base 10 di (CEA + 1)
+mean(log10(data$CEA + 1), na.rm = TRUE)
+
+```
+
+Si trova dunque che la variabile é il logaritmo in base 10, si procede con l'analisi
+
+Si testa per multicollinearitá controllando la correlazione tra variabili. Letteratura suggerisce non piú di 0.7
+
+```{r, error=TRUE}
+# Ricreiamo LogCEA come log10(CEA)
+data$LogCEA_check <- log10(data$CEA)
+
+# Differenza assoluta tra le due
+diff <- abs(data$LogCEA - data$LogCEA_check)
+
+# Controlliamo quante differenze sono significative (> 0.001)
+sum(diff > 0, na.rm = TRUE)
+
+```
+
+Si verifica ora la multicollinearitá tra le variabili
+
+```{r, error=TRUE}
+cor(data$CEA, data$LogCEA, use= "complete.obs")
+# Regressione + VIF
+
+model <- lm(Death ~ CEA + LogCEA, data = data)
+library(car)
+vif(model)
+
+# Modelli alternativi
+model1 <- glm(Death ~ CEA, data = data, family = "binomial")
+model2 <- glm(Death ~ LogCEA, data = data, family = "binomial")
+
+# Confronto AIC
+AIC(model1, model2)
+
+
+```
+
+La correlazione non é sufficentemente alta per giustificare l'ipotesi di multicollinearitá problematica. Il VIF ci sostiene nella scelta di mantenere entrambe le variabili.
+
+Sapendo che entrambe verranno tenute, si manterrá a mente che LogCEA offre piú potere predittivo. Si valuterá in un secondo momento se scartare CEA.
+
+#### Imputazione dei NA
+
+Prima si verifica che i records corrispondano tra le due variabili problematiche
+
+```{r, error=TRUE}
+# Verifica se gli NA sono nelle stesse righe
+na_cea <- is.na(data$CEA)
+na_logcea <- is.na(data$LogCEA)
+
+# Rimuove i record con LogCEA ≤ 0 o NA
+data <- data[!is.na(data$CEA), ]
+
+#data$CEA_imputed <- NULL
+data$LogCEA_check <- NULL
+
+
+
+
+```
+
+Si verifica la distribuzione ella variabile OG per scegliere che tipo di imputazione utilizzare
+
+```{r, error=TRUE}
+hist(data$LogCEA)
+plot(data$LogCEA)
+```
+
+Variaile ESTREMAMENTE SKEWED, mediana scelta piú prodente
+
+```{r, error=TRUE}
+data$LogCEA[is.na(data$LogCEA)] <- 1.26435
+
+summary(data$CEA)
+
+
+summary(data$LogCEA)
+```
+
+```{r, error=TRUE}
+cat("Numero di record nel dataset:", nrow(data), "\n")
+```
+
+```{r, error=TRUE}
+data$LogCEA <- log10(data$CEA)
+
+```
+
+-------------- AGGIUNTA POST: conviene eliminare la variabile CEA, molto multicollineare in fare di analisi successiva:
+
+```{r, error=TRUE}
+data$CEA <- NULL
+```
+
+## 6 - AnesTime
+
+Presenti outliers, il range INTERQUANTILE deve essere tra 255 e 390 minuti, presenti valori maggiori
+
+```{r, error=TRUE}
+summary(data$AnesTime)
+```
+
+```{r, error=TRUE}
+cat("Numero di record nel dataset:", nrow(data), "\n")
+```
+
+```{r, error=TRUE}
+cor(data$AnesTime, data$AnesTime, use= "complete.obs")
+# Regressione + VIF
+
+model <- lm(Death ~ Log2AT + AnesTime, data = data)
+library(car)
+vif(model)
+
+# Modelli alternativi
+model1 <- glm(Death ~ Log2AT, data = data, family = "binomial")
+model2 <- glm(Death ~ AnesTime, data = data, family = "binomial")
+
+# Confronto AIC
+AIC(model1, model2)
+
+
+```
+
+```{r, error=TRUE}
+data$Log2AT <- NULL
+```
+
+## 7- Outliers
+
+si controlla ora il dataset completo, per analizzare possibili outliers e valori mancanti
+
+```{r, error=TRUE}
+skimr::skim_without_charts(data)
+```
+
+La variabile AJCC non contine nulli, si binarizza
+
+```{r, error=TRUE}
+data$AJCC_bin <- ifelse(data$AJCC == '4a', 0,1 )
+
+data$AJCC <- NULL
+```
+
+## 8- analisi e controllo info perse
+
+```{r, error=TRUE}
+print(paste('Diabete Mellito (DM):', sum(data$DM == 1), 'su 203, TOT', length(data$DM)))
+print(paste('Cardiopatia ischemica (CAD):', sum(data$CAD == 1), 'su 72, TOT', length(data$CAD)))
+print(paste('Scompenso cardiaco (HF):', sum(data$HF == 1), 'su 44, TOT', length(data$HF)))
+print(paste('Ictus / Stroke (CVA):', sum(data$CVA == 1), 'su 57 TOT', length(data$CVA)))
+print(paste('Malattia renale cronica (CKD):', sum(data$CKD == 1), 'su 138, TOT', length(data$CKD)))
+
+```
+
+```{r, error=TRUE}
+print(paste('Sesso: Maschi (TOT 612)', sum(data$Gender == 1), '- Femmine (TOT 387)', sum(data$Gender == 2), ', IN TOTALE ', length(data$Gender)))
+
+```
+
+```{r, error=TRUE}
+print(paste('Localizzazione Tumore - Colon:', sum(data$TumorLOC == 0), 'su 712 , TOTALE', length(data$TumorLOC)))
+print(paste('Localizzazione Tumore - Retto:', sum(data$TumorLOC == 1), 'su 313, TOTALE ', length(data$TumorLOC)))
+
+print(paste('Grado cellulare G1:', sum(data$Cell_diff == 1), 'su 823'))
+print(paste('Grado cellulare G2:', sum(data$Cell_diff == 2), 'su 121' ))
+
+print(paste('Tipo Mucinoso:', sum(data$Mucin_TYPE == 1), 'su 73' ))
+print(paste('Tipo Non-Mucinoso:', sum(data$Mucin_TYPE == 0), 'su 999-73 = 926' ))
+
+print(paste('Cellule ad anello con castone:', sum(data$SignetRING == 1), 'su 42' ))
+
+```
+
+```{r, error=TRUE}
+print(paste('Chirurgia laparoscopica:', sum(data$Laparoscopic == 1)))
+print(paste('Anestesia epidurale (EA):', sum(data$EA == 1), 'su 165' ))
+print(paste('Metastasi solo liver (Liver_Only):', sum(data$Liver_Only == 1), 'su 370' ))
+print(paste('Invasione linfovascolare:', sum(data$Lymphovascularinvasion == 1), 'su 485'))
+print(paste('Invasione perineurale:', sum(data$perineural == 1), 'su 208'))
+print(paste('Trasfusioni - Nessuna:', sum(data$RBC == 0),'/577', 
+            '- Meno di 4 unita:', sum(data$RBC == 1),'/305', 
+            '- Più di 4 unita:', sum(data$RBC == 2), '/117'))
+
+```
+
+```{r, error=TRUE}
+print(paste('Chemioterapia post:', sum(data$CT == 1), 'su 999' ))
+print(paste('Radioterapia post:', sum(data$RT == 1), 'su 110' ))
+print(paste('Terapia pre operatoria (NACTRT):', sum(data$NACTRT == 1), 'su 155'))
+
+```
+
+```{r, error=TRUE}
+
+print(paste('4a:', sum(data$AJCC_bin == 0),'su 558'
+                       ,'4:', sum(data$AJCC_bin ==1), 'su 441'))
+```
+
+TARGET
+
+```{r, error=TRUE}
+print(paste('Decessi (Death):', sum(data$Death == 1)))
+print(paste("non decessi", sum(data$Death ==0)))
+print(paste('Progressioni tumorali (Progress):', sum(data$Progress == 1)))
+
+```
+
+Si conclude che le INFRMAZIONI perse nel pre processing non impattano cosi tanto, ma si controllano le viualizzazioni delle distribuzioni delle variabili per controllare eventuali squilibri
+
+# DATA VIZUALIZATION
+
+### Distribuzioni
+
+Si controllano inizialmente le distribuzioni generali di tutte le variabili.
+
+```{r, error=TRUE}
+# Seleziona solo le colonne numeriche
+numeric_vars <- data[, sapply(data, is.numeric)]
+
+
+library(ggplot2)
+library(tidyr)
+
+# Converti in formato lungo
+numeric_long <- pivot_longer(as.data.frame(numeric_vars), cols = everything(), names_to = "Variable", values_to = "Value")
+
+ggplot(numeric_long, aes(x = Value)) +
+  geom_histogram(fill = "orange", color = "black", bins = 30) +
+  facet_wrap(~ Variable, scales = "free") +
+  theme_minimal()
+
+
+```
+
+Non si notano comportamenti preoccupanti
+
+### Outliers
+
+Per verificare gli outliers:
+
+```{r, error=TRUE}
+
+library(ggplot2)
+library(dplyr)
+
+for (var in colnames(data)) {
+  p <- ggplot(data, aes_string(x = "''", y = var)) + 
+    geom_boxplot(fill = "orange3") + 
+    labs(title = paste("Box Plot di", var), y = var, x = "") +
+    theme_minimal() + 
+    theme(axis.text.x = element_blank(),
+          axis.ticks.x = element_blank())
+  
+  print(p)
+}
+
+```
+
+### Variables
+
+Si prova ad analizzare se i comportamenti delle variabili sono influenzati dal sesso o dall'eta
+
+```{r, error=TRUE}
+ggplot(data, aes(x = factor(Gender))) + 
+  geom_bar(fill = "orange") + 
+  labs(title = "Distribuzione per sesso", x = "Sesso", y = "Conteggio")
+
+```
+
+```{r, error=TRUE}
+ggplot(data, aes(x = factor(Death))) + 
+  geom_bar(fill = "orange") + 
+  labs(title = "Distribuzione per morte", x = "morte", y = "Conteggio")
+
+```
+
+```{r, error=TRUE}
+skim_without_charts(data$Age)
+
+```
+
+```{r, error=TRUE}
+ggplot(data, aes(x = factor(Age))) + 
+  geom_bar(fill = "orange") + 
+  labs(title = "Distribuzione per Etá", x = "Age", y = "Conteggio")
+
+```
+
+COMORBIDITÁ
+
+```{r, error=TRUE}
+ggplot(data, aes(x = factor(Gender), fill = factor(DM))) +
+  geom_bar(position = "fill") +
+  labs(title = "Prevalenza diabete per sesso", y = "Proporzione")
+
+```
+
+```{r, error=TRUE}
+ggplot(data, aes(x = factor(DM), fill = factor(Age))) +
+  geom_bar(position = "fill") +
+  labs(title = "Prevalenza etá per diabete ", y = "Proporzione")
+
+```
+
+```{r, error=TRUE}
+ggplot(data, aes(x = factor(Gender), fill = factor(HF))) +
+  geom_bar(position = "fill") +
+  labs(title = "Prevalenza infarto per sesso", y = "Proporzione")
+
+```
+
+```{r, error=TRUE}
+ggplot(data, aes(x = factor(Age), fill = factor(HF))) +
+  geom_bar(position = "fill") +
+  labs(title = "Prevalenza infarto per etá", y = "Proporzione")
+
+```
+
+```{r, error=TRUE}
+ggplot(data, aes(x = factor(Gender), fill = factor(TumorLOC))) +
+  geom_bar(position = "fill") +
+  labs(title = "Prevalenza posizione per sesso, colon 0", y = "Proporzione")
+
+```
+
+```{r, error=TRUE}
+ggplot(data, aes(x = factor(Age), fill = factor(TumorLOC))) +
+  geom_bar(position = "fill") +
+  labs(title = "Prevalenza posizione per eta, colon 0 retto 1, ", y = "Proporzione")
+
+```
+
+```{r, error=TRUE}
+ggplot(data, aes(x = factor(TumorLOC), fill = factor(Age))) +
+  geom_bar(position = "fill") +
+  labs(title = "Prevalenza eta per posizione, colon 0 retto 1, ", y = "Proporzione")
+
+```
+
+```{r, error=TRUE}
+ggplot(data, aes(x = factor(Death), y = Age)) +
+  geom_boxplot(fill = "orange") +
+  labs(title = "Distribuzione etàmorte", x = "Decesso", y = "Età")
+
+```
+
+```{r, error=TRUE}
+ggplot(data, aes(x = factor(RBC), fill = factor(Progress))) +
+  geom_bar(position = "fill") +
+  labs(title = "Progressione tumorale per livello di trasfusioni", y = "Proporzione")
+
+```
+
+```{r, error=TRUE}
+ggplot(data, aes(x = factor(RBC), fill = factor(Age))) +
+  geom_bar(position = "fill") +
+  labs(title = "etá per livello di trasfusioni", y = "Proporzione")
+
+```
+
+```{r, error=TRUE}
+ggplot(data, aes(x = factor(RBC), fill = factor(Gender))) +
+  geom_bar(position = "fill") +
+  labs(title = "Genere per livello di trasfusioni", y = "Proporzione")
+
+```
+
+```{r, error=TRUE}
+ggplot(data, aes(x = factor(Gender), fill = factor(Progress))) +
+  geom_bar(position = "fill") +
+  labs(title = "Progressione tumorale per Genere", y = "Proporzione")
+
+```
+
+```{r, error=TRUE}
+ggplot(data, aes(x = factor(Age), fill = factor(Progress))) +
+  geom_bar(position = "fill") +
+  labs(title = "Progressione tumorale per etá", y = "Proporzione")
+
+```
+
+
+
+## VARIABLE OF INTEREST
+```{r}
+library(ggplot2)
+data$A
+ggplot(data, aes(x = factor(Death), y = AnesTime)) +
+  geom_boxplot(fill = c('orange4', 'yellow3')) +
+  labs(title = 'Distribution of AnesTime by Death Outcome',
+       x = 'Death (0 = Alive, 1 = Dead)',
+       y = 'Anesthesia Time (minutes)') +
+  theme_minimal()
+
+```
+
+
+```{r}
+ggplot(data, aes(x = factor(Gender), y = AnesTime)) +
+  geom_violin(trim = FALSE) +
+  labs(title = 'Violin Plot of AnesTime by Gender',
+       x = 'Death (0 = Alive, 1 = Dead)',
+       y = 'Anesthesia Time (minutes)') +
+  theme_minimal()
+
+```
+
+```{r}
+ggplot(data, aes(x = AnesTime, y = IntervalOD, color = factor(Death))) +
+  geom_point(alpha=0.5) +
+  labs(title = 'AnesTime vs Survival Time by Death',
+       x = 'Anesthesia Time (minutes)',
+       y = 'IntervalOD (months)',
+       color = 'Death') +
+  theme_minimal()
+
+```
+
+
+# CORRELATION
+
+COMORBIDITA CORRELAZIONE
+
+```{r, error=TRUE}
+library(corrplot)
+corrplot(cor(data[, c("DM", "CAD", "HF", "CKD", "CVA")]), method = "color")
+
+```
+
+```{r, error=TRUE}
+library(corrplot)
+corrplot(cor(data), method = "color")
+
+```
+
+```{r, error=TRUE}
+
+cor_matrix <- cor(data, use = "complete.obs")
+
+# Filtra le correlazioni con valore assoluto maggiore di 0.5 (escludendo la diagonale)
+high_corr <- cor_matrix
+high_corr[abs(high_corr) <= 0.35 | diag(ncol(high_corr)) == 1] <- NA
+
+# Mostra solo le correlazioni forti
+print(high_corr)
+
+```
+
+Correlazioni emerse Age -- ASA3: 0.4647 ➤ Interpretazione: C'è una correlazione positiva moderata tra età e lo score ASA3 (American Society of Anesthesiologists physical status classification). Ha senso clinicamente: all'aumentare dell'età, è più probabile che il paziente abbia una condizione clinica peggiore.
+
+Liver_Only -- AJCC_bin: -0.5995 ➤ Interpretazione: C'è una correlazione negativa moderata/forte tra la presenza di metastasi epatiche isolate e la variabile binaria AJCC_bin (probabilmente uno stadio AJCC categorizzato). Potrebbe indicare che i pazienti con solo metastasi epatiche tendono ad avere stadi AJCC più bassi rispetto a quelli con metastasi più estese.
+
+Interval -- IntervalR: 0.7079 ➤ Interpretazione: Correlazione fortemente positiva tra Interval e Interval
+
+```{r, error=TRUE}
+# Pearson
+cor_pearson <- cor(data, use = "complete.obs", method = "pearson")
+
+# Spearman
+cor_spearman <- cor(data, use = "complete.obs", method = "spearman")
+
+# Kendall
+cor_kendall <- cor(data, use = "complete.obs", method = "kendall")
+
+```
+
+```{r, error=TRUE}
+
+library(Hmisc)
+
+# Pearson con p-value
+res_pearson <- rcorr(as.matrix(data), type = "pearson")
+res_spearman <- rcorr(as.matrix(data), type = "spearman")
+
+```
+
+```{r, error=TRUE}
+library(corrplot)
+
+# Pearson
+corrplot(cor_pearson, method = "color", type = "upper")
+
+# Spearman
+corrplot(cor_spearman, method = "circle", type = "lower")
+
+```
+
+```{r, error=TRUE}
+methods <- c("pearson", "spearman", "kendall")
+
+for (m in methods) {
+  cat("\n===== Metodo:", m, "=====\n")
+  cor_matrix <- cor(data, use = "complete.obs", method = m)
+  print(round(cor_matrix, 3))
+}
+
+```
+
+A livello interpretativo, PEARSON - RELAZIONE LINEARE CONTINUA:
+
+1- ETÁ: eta correlata positivamente con HF (piú anzianitá = piú infartuati) e ASA3. Negativamente con chemioterapia 2- ASA3: correlato positivametne ma moderatamente con tutte le comorbiditá: é un buon proxy dello stato comorbito dei pazienti?
+
+PEARSON: MONOTONA
+
+Age -- ASA3: ρ = 0.480 → Età maggiore si associa a status ASA3 (logico: pazienti più anziani tendono ad avere comorbidità).
+
+Age -- Interval: ρ = -0.345 → Età maggiore correlata a un tempo inferiore tra diagnosi e trattamento? Potrebbe indicare priorità clinica.
+
+Interval -- ASA3: ρ = -0.270 → Anche qui, pazienti più gravi (ASA3) ricevono cure più tempestive.
+
+CKD -- CVA: ρ = 0.264 → Insufficienza renale cronica associata a pregressi eventi cerebrovascolari (coerenza clinica).
+
+ASA3 -- CAD/HF/CVA/CKD: tutte \>0.2 → conferma che ASA3 sintetizza diverse comorbidità.
+
+MOLTO INTERESSANTE: PROGRESS E TUMORLOC ρ = -0.221: sedi tumorali hanno minore tendenza alla progressione!!!!
+
+Age vs ASA3: ρ = 0.397 → correlazione moderata e positiva. Conferma che l'età avanzata tende ad associarsi a uno stato fisico compromesso (ASA3 alto).
+
+Age vs HF (scompenso cardiaco): ρ = 0.176 → relazione debole ma coerente con la letteratura.
+
+Age vs Interval: ρ = -0.236 → età maggiore è debolmente associata a un intervallo più breve (probabile tra intervento e progressione).
+
+CHEMIOTERAPIA invece é neg corr con ASA3 e etá, cioe i pazienti giovani e meno fragili ricevono piu spesso chemioterapia.
+
+ASA3 É UN OTTIMO SURROGATO SINTETICO DELLE COMORBIDITÁ: STATO CLINICO
+
+SE SPEARMAN ÉMAGGIORE DI PEARSON: POTREBBE ESSERCI UNA RELAZIONE MONOTONA NON LINEARE!!!! - AGE e INTERVAL - CKD e RBC
+
+-   HFe ASA3
+-   PROGRESS - TUMOR LOR
+
+
+## Correlazioni tra AnesTime e variabili cliniche
+
+```{r, error = TRUE}
+library(ggplot2)
+library(corrplot)
+
+# 📊 Selezione variabili di interesse
+corr_data <- data[, c("AnesTime", "ASA3", "LogCEA", "AJCC_bin", "RBC", "Age")]
+
+# 🔎 Matrici di correlazione
+cor_pearson <- cor(corr_data, method = "pearson", use = "complete.obs")
+cor_spearman <- cor(corr_data, method = "spearman", use = "complete.obs")
+cor_kendall <- cor(corr_data, method = "kendall", use = "complete.obs")
+
+# 🖼 Visualizzazione delle correlazioni
+corrplot(cor_pearson, method = "color", title = "Pearson Correlation", addCoef.col = "black")
+corrplot(cor_spearman, method = "color", title = "Spearman Correlation", addCoef.col = "black")
+corrplot(cor_kendall, method = "color", title = "Kendall Correlation", addCoef.col = "black")
+
+# 📊 Analisi specifica tra AnesTime e variabili
+print(cor.test(data$AnesTime, data$ASA3, method = "pearson"))
+print(cor.test(data$AnesTime, data$LogCEA, method = "spearman"))
+print(cor.test(data$AnesTime, data$AJCC_bin, method = "kendall"))
+
+# 📊 Distribuzione AnesTime
+ggplot(data, aes(x = AnesTime)) +
+  geom_histogram(bins = 30, fill = "skyblue", color = "black") +
+  labs(title = "Distribution of AnesTime", x = "Anesthesia Time (minutes)", y = "Count") +
+  theme_minimal()
+
+# 📊 Distribuzioni delle altre variabili
+ggplot(data, aes(x = LogCEA)) +
+  geom_histogram(bins = 30, fill = "orange", color = "black") +
+  theme_minimal()
+
+ggplot(data, aes(x = factor(ASA3))) +
+  geom_bar(fill = "purple") +
+  theme_minimal()
+
+ggplot(data, aes(x = factor(AJCC_bin))) +
+  geom_bar(fill = "green") +
+  theme_minimal()
+
+# 📊 Boxplot di AnesTime per Death
+ggplot(data, aes(x = factor(Death), y = AnesTime, fill = factor(Death))) +
+  geom_boxplot() +
+  labs(title = "AnesTime by Death Outcome", x = "Death (0=Alive,1=Dead)", y = "Anesthesia Time (minutes)") +
+  theme_minimal()
+
+```
+
+Pearson:
+
+La correlazione tra AnesTime e ASA3 è -0.035, p=0.2855, indicando nessuna correlazione lineare significativa.
+Interpretazione: La durata dell'anestesia non varia linearmente con lo stato fisico preoperatorio del paziente.
+
+AnesTime e RBC mostrano una correlazione +0.27, suggerendo che pazienti con tempi di anestesia più lunghi tendono a ricevere più trasfusioni.
+Interpretazione: Questo ha senso clinico, poiché interventi più lunghi possono portare a più perdite di sangue.
+
+Correlazioni con LogCEA (-0.11) e AJCC_bin (-0.02) sono deboli e statisticamente non significative.
+
+Spearman e Kendall:
+
+Confermano l’assenza di correlazioni forti tra AnesTime e altre variabili, ma rilevano una piccola correlazione negativa significativa con LogCEA (Spearman rho=-0.098, p=0.003).
+Interpretazione: Pazienti con tumori più aggressivi (CEA alto) possono avere interventi più complessi, ma l’associazione è debole.
+
+AnesTime e RBC hanno correlazioni più consistenti (Spearman=0.21, Kendall=0.17), confermando la tendenza osservata con Pearson.
+
+📊 Distribuzione di AnesTime
+La distribuzione di AnesTime è asimmetrica verso destra, con valori medi intorno ai 300-400 minuti ma alcuni casi oltre 900 minuti.
+Interpretazione: Alcuni interventi sono eccezionalmente lunghi, probabilmente legati a complicazioni intraoperatorie o complessità chirurgiche.
+
+La distribuzione è coerente con un dataset reale, dove la variabilità riflette la complessità clinica.
+
+📊 Distribuzione di variabili correlate (ASA3, AJCC_bin, LogCEA)
+ASA3 e AJCC_bin mostrano una prevalenza di pazienti con ASA3=0 e AJCC_bin=0, ma con una quota consistente di casi ad alto rischio.
+
+LogCEA è asimmetrico e concentrato su valori bassi, con alcuni outlier a valori elevati (tumori molto aggressivi).
+
+📊 AnesTime vs Death
+Il boxplot di AnesTime stratificato per Death mostra distribuzioni simili tra vivi e deceduti, con leggera tendenza a tempi maggiori nei deceduti.
+Tuttavia, le differenze sono modeste e potrebbero non essere statisticamente significative senza test aggiuntivi.
+
+📌 Conclusione preliminare
+AnesTime non sembra fortemente correlato a variabili cliniche rilevanti (ASA3, LogCEA, AJCC_bin), ma mostra una correlazione moderata con RBC, plausibilmente legata a trasfusioni intraoperatorie.
+
+La distribuzione di AnesTime è coerente con dati reali e riflette la variabilità della chirurgia colorettale.
+
+Death e AnesTime non mostrano differenze evidenti a livello descrittivo; servirà un’analisi statistica più approfondita (Cox PH o log-rank).
+
+
+
+
+
+
+
+
+
+# METODI PROIEZIONE - riduzione dimensionale spazi latenti 
+
+UMAP e t-SNE: sono solo metodi di proiezione (riduzione dimensionale). Non creano cluster di per sé, ma aiutano a visualizzare i dati.
+
+I DATI VENGONO STANDARDIZZATI: per rendere comparabile ogni variabile, media 0 e sd 1
+Lo richiedevano i metodi scelti - UMAP t-SNE e, dopo, PCA.
+
+Viene effettuata la riduzione dimensionale per visualizzare dati ad alta dimensionalità in 2D.
+
+t-SNE e UMAP sono tecniche non lineari (adatte a pattern complessi).
+
+PCA è lineare, utile per interpretabilità e visualizzazione.
+
+Non servono per clustering, ma per capire la distribuzione dei dati.
+
+```{r, error=TRUE}
+# install.packages(c("Rtsne", "umap"))
+
+# Caricamento pacchetti
+library(Rtsne)
+library(umap)
+library(ggplot2)
+
+# Standardizza i dati
+data_scaled <- scale(data)
+
+# t-SNE
+set.seed(42)
+tsne_out <- Rtsne(data_scaled, dims = 2, perplexity = 30, verbose = TRUE, max_iter = 500)
+tsne_df <- data.frame(
+  Dim1 = tsne_out$Y[,1],
+  Dim2 = tsne_out$Y[,2]
+)
+
+# UMAP
+umap_out <- umap(data_scaled)
+umap_df <- data.frame(
+  Dim1 = umap_out$layout[,1],
+  Dim2 = umap_out$layout[,2]
+)
+
+# Grafico t-SNE
+ggplot(tsne_df, aes(x = Dim1, y = Dim2)) +
+  geom_point(alpha = 0.7) +
+  labs(title = "t-SNE dei dati") +
+  theme_minimal()
+
+# Grafico UMAP
+ggplot(umap_df, aes(x = Dim1, y = Dim2)) +
+  geom_point(alpha = 0.7) +
+  labs(title = "UMAP dei dati") +
+  theme_minimal()
+
+```
+
+### INTERPRETAZIONE
+
+Serve per vedere se la variabile target separa i dati nella proiezione.
+
+Se i punti colorati per "Death" o chi per lei  si raggruppano, significa che quella variabile ha un effetto latente.
+
+```{r, error=TRUE}
+# Aggiungiamo la variabile target (assumendo sia "Death")
+tsne_df$Death <- data$Death
+umap_df$Death <- data$Death
+
+# t-SNE con colorazione
+ggplot(tsne_df, aes(x = Dim1, y = Dim2, color = as.factor(Death))) +
+  geom_point(alpha = 0.7) +
+  labs(title = "t-SNE dei dati (colorato per Death)", color = "Death") +
+  theme_minimal()
+
+# UMAP con colorazione
+ggplot(umap_df, aes(x = Dim1, y = Dim2, color = as.factor(Death))) +
+  geom_point(alpha = 0.7) +
+  labs(title = "UMAP dei dati (colorato per Death)", color = "Death") +
+  theme_minimal()
+
+```
+
+```{r, error=TRUE}
+
+tsne_df$Gender <- data$Gender
+umap_df$Gender <- data$Gender
+
+# t-SNE con colorazione
+ggplot(tsne_df, aes(x = Dim1, y = Dim2, color = as.factor(Gender))) +
+  geom_point(alpha = 0.7) +
+  labs(title = "t-SNE dei dati (colorato per Death)", color = "Gender") +
+  theme_minimal()
+
+# UMAP con colorazione
+ggplot(umap_df, aes(x = Dim1, y = Dim2, color = as.factor(Gender))) +
+  geom_point(alpha = 0.7) +
+  labs(title = "UMAP dei dati (colorato per GEDER)", color = "Gender") +
+  theme_minimal()
+
+```
+
+```{r, error=TRUE}
+# Aggiungiamo la variabile target (assumendo sia "Death")
+tsne_df$ASA3 <- data$ASA3
+umap_df$ASA3 <- data$ASA3
+
+# t-SNE con colorazione
+ggplot(tsne_df, aes(x = Dim1, y = Dim2, color = as.factor(ASA3))) +
+  geom_point(alpha = 0.7) +
+  labs(title = "t-SNE dei dati (colorato per Death)", color = "ASA3") +
+  theme_minimal()
+
+# UMAP con colorazione
+ggplot(umap_df, aes(x = Dim1, y = Dim2, color = as.factor(ASA3))) +
+  geom_point(alpha = 0.7) +
+  labs(title = "UMAP dei dati (colorato per ASA3)", color = "ASA3") +
+  theme_minimal()
+
+```
+
+```{r, error=TRUE}
+
+tsne_df$CT <- data$CT
+umap_df$CT <- data$CT
+
+# t-SNE con colorazione
+ggplot(tsne_df, aes(x = Dim1, y = Dim2, color = as.factor(CT))) +
+  geom_point(alpha = 0.7) +
+  labs(title = "t-SNE dei dati (colorato per CT)", color = "CT") +
+  theme_minimal()
+
+# UMAP con colorazione
+ggplot(umap_df, aes(x = Dim1, y = Dim2, color = as.factor(CT))) +
+  geom_point(alpha = 0.7) +
+  labs(title = "UMAP dei dati (colorato per CT)", color = "CT") +
+  theme_minimal()
+
+```
+
+```{r, error=TRUE}
+
+tsne_df$AJCC_bin <- data$AJCC_bin
+umap_df$AJCC_bin <- data$AJCC_bin
+
+# t-SNE con colorazione
+ggplot(tsne_df, aes(x = Dim1, y = Dim2, color = as.factor(AJCC_bin))) +
+  geom_point(alpha = 0.7) +
+  labs(title = "t-SNE dei dati (colorato per AJCC_bin)", color = "AJCC_bin") +
+  theme_minimal()
+
+# UMAP con colorazione
+ggplot(umap_df, aes(x = Dim1, y = Dim2, color = as.factor(AJCC_bin))) +
+  geom_point(alpha = 0.7) +
+  labs(title = "UMAP dei dati (colorato per AJCC_bin)", color = "AJCC_bin") +
+  theme_minimal()
+
+```
+
+```{r, error=TRUE}
+
+tsne_df$HF <- data$HF
+umap_df$HF <- data$HF
+
+# t-SNE con colorazione
+ggplot(tsne_df, aes(x = Dim1, y = Dim2, color = as.factor(HF))) +
+  geom_point(alpha = 0.7) +
+  labs(title = "t-SNE dei dati (colorato per HF)", color = "HF") +
+  theme_minimal()
+
+# UMAP con colorazione
+ggplot(umap_df, aes(x = Dim1, y = Dim2, color = as.factor(HF))) +
+  geom_point(alpha = 0.7) +
+  labs(title = "UMAP dei dati (colorato per HF)", color = "HF") +
+  theme_minimal()
+
+```
+
+```{r, error=TRUE}
+
+tsne_df$Liver_Only <- data$Liver_Only
+umap_df$Liver_Only <- data$Liver_Only
+
+# t-SNE con colorazione
+ggplot(tsne_df, aes(x = Dim1, y = Dim2, color = as.factor(Liver_Only))) +
+  geom_point(alpha = 0.7) +
+  labs(title = "t-SNE dei dati (colorato per Liver_Only)", color = "Liver_Only") +
+  theme_minimal()
+
+# UMAP con colorazione
+ggplot(umap_df, aes(x = Dim1, y = Dim2, color = as.factor(Liver_Only))) +
+  geom_point(alpha = 0.7) +
+  labs(title = "UMAP dei dati (colorato per Liver_Only)", color = "Liver_Only") +
+  theme_minimal()
+
+```
+
+```{r, error=TRUE}
+
+tsne_df$Laparoscopic <- data$Laparoscopic
+umap_df$Laparoscopic <- data$Laparoscopic
+
+# t-SNE con colorazione
+ggplot(tsne_df, aes(x = Dim1, y = Dim2, color = as.factor(Laparoscopic))) +
+  geom_point(alpha = 0.7) +
+  labs(title = "t-SNE dei dati (colorato per Laparoscopic)", color = "Laparoscopic") +
+  theme_minimal()
+
+# UMAP con colorazione
+ggplot(umap_df, aes(x = Dim1, y = Dim2, color = as.factor(Laparoscopic))) +
+  geom_point(alpha = 0.7) +
+  labs(title = "UMAP dei dati (colorato per Laparoscopic)", color = "Laparoscopic") +
+  theme_minimal()
+
+```
+
+## t-test SU UMAP
+
+```{r, error=TRUE}
+t.test(umap_df$Dim1 ~ data$Laparoscopic)
+t.test(umap_df$Dim1 ~ data$HF)
+
+```
+
+LAPAROSCOPIA
+
+Gruppo 0 (non laparoscopici): ≈ -0.14
+
+Gruppo 1 (laparoscopici): ≈ 3.3 → forte separazionE = variabile determinante nei pattern latenti della popolazione
+
+INFARTO GRUPPO 0 , NO HF, = -0.21 GRUPPO 1 , YES HF = 4.8
+
+Si verficano tutte le variabili, per vedere che cosa comunica la U
+
+### T TEST SU DIMENSIONE 1 DI UMAP
+
+```{r, error=TRUE}
+# Lista delle variabili da testare
+variabili <- c("Age", "Gender", "ASA3", "DM", "CAD", "HF", "CVA", 
+               "CKD", "CEA", "LogCEA", "Laparoscopic", "TumorLOC", "EA", "AnesTime", 
+               "AnesTime", "RBC", "Liver_Only", "Cell_diff", "Mucin_TYPE", "SignetRING", 
+               "Lymphovascularinvasion", "perineural", "CT", "RT", "NACTRT", 
+               "Interval", "Progress", "IntervalR", "AJCC_bin")
+
+# Dataframe per salvare i risultati
+risultati <- data.frame(
+  Variabile = character(),
+  p_value = numeric(),
+  t_stat = numeric(),
+  mean_group0 = numeric(),
+  mean_group1 = numeric(),
+  stringsAsFactors = FALSE
+)
+
+# Loop sulle variabili
+for (v in variabili) {
+  if (v %in% names(data)) {
+    # Isola la variabile target e la pulizia dei NA
+    tmp <- data.frame(
+      x = umap_df$Dim1,
+      group = data[[v]]
+    )
+    tmp <- tmp[complete.cases(tmp), ]
+    
+    # Converti character/factor in numerico binario se possibile
+    if (is.character(tmp$group) || is.factor(tmp$group)) {
+      levels <- unique(tmp$group)
+      if (length(levels) == 2) {
+        tmp$group <- as.numeric(tmp$group == levels[2])
+      } else {
+        next  # Salta variabili con più di 2 classi
+      }
+    }
+    
+    # Esegui t-test solo se gruppo binario
+    if (length(unique(tmp$group)) == 2) {
+      t <- t.test(x ~ group, data = tmp)
+      risultati <- rbind(risultati, data.frame(
+        Variabile = v,
+        p_value = t$p.value,
+        t_stat = t$statistic,
+        mean_group0 = mean(tmp$x[tmp$group == 0]),
+        mean_group1 = mean(tmp$x[tmp$group == 1])
+      ))
+    }
+  }
+}
+
+# Ordina per significatività
+risultati <- risultati[order(risultati$p_value), ]
+
+# Visualizza
+print(risultati)
+
+```
+
+### T TEST DI DIM2 DI UMAP
+
+```{r, error=TRUE}
+
+# Lista delle variabili binarie o categoriali 2 livelli
+vars <- c("Age", "Gender", "ASA3", "DM", "CAD", "HF", "CVA", 
+          "CKD", "CEA", "LogCEA", "Laparoscopic", "TumorLOC", "EA", 
+          "AnesTime", "AnesTime", "RBC", "Liver_Only", "Cell_diff", 
+          "Mucin_TYPE", "SignetRING", "Lymphovascularinvasion", "perineural", 
+          "CT", "RT", "NACTRT", "Interval", "Progress", "IntervalR", "AJCC_bin")
+
+# Data frame vuoto per salvare i risultati
+results <- data.frame(Variabile=character(),
+                      p_value=double(),
+                      t_stat=double(),
+                      mean_group0=double(),
+                      mean_group1=double(),
+                      stringsAsFactors=FALSE)
+
+# Loop per ogni variabile
+for (var in vars) {
+  # Estrai la variabile target
+  group <- data[[var]]
+  
+  # Verifica che ci siano solo due gruppi (t-test richiede questo)
+  if (length(unique(na.omit(group))) == 2) {
+    test <- try(t.test(umap_df$Dim2 ~ group), silent=TRUE)
+    if (!inherits(test, "try-error")) {
+      means <- tapply(umap_df$Dim2, group, mean, na.rm=TRUE)
+      results <- rbind(results, data.frame(
+        Variabile = var,
+        p_value = test$p.value,
+        t_stat = test$statistic,
+        mean_group0 = means[1],
+        mean_group1 = means[2]
+      ))
+    }
+  } else {
+    # Se la variabile non è binaria, saltiamo
+    warning(paste("Variabile non binaria:", var))
+  }
+}
+
+# Ordina per p-value crescente
+results <- results[order(results$p_value), ]
+
+# Visualizza i primi risultati
+print(results)
+
+```
+
+## ASSI LATENTI DELLA UMPA: INTERPRETAZIONE CLINICA
+
+ha imparato a comprimere l'informazione clinica in due dimensioni che riflettono cluster cliniCCI. pattern che emerge:
+
+*dimensione1* è guidata soprattutto da: COMORBIDITÁ
+
+Comorbidità cliniche e fragilità: CAD, CVA, HF, ASA3, CKD.
+
+Tipo di chirurgia (Laparoscopic), radioterapia (RT), chemioterapia (CT).
+
+Riflette quindi lo stato clinico generale e decisioni terapeutiche.
+
+*dimensione2* è guidata soprattutto da: CARATTERISTICHE TUMORALI, STAGING E TRATTAMENTO
+
+Parametri istopatologici e prognostici: Signet Ring, Mucin Type, AJCC_bin, Cell_diff, Lymphovascular invasion.
+
+Trattamenti avanzati: NACTRT, chirurgia laparoscopica.
+
+Presenza di metastasi (Liver_Only).
+
+Riflette l'aggressività tumorale e il tipo istologico.
+
+CRITERI DI SEPARAZIONE DIM 2 ha un singificato clinico focalizzato sull'approccio chirurgico e allo stadio del tumore DIM 1 si focalizza principalmente sulle comorbiditá e alle caratteristiche del tumore.
+
+# CLUSTER
+
+Il clustering è eseguito sia sui dati originali (“raw”) che su quelli ridotti tramite tecniche come PCA e UMAP per verificare la presenza di strutture di gruppo intrinseche. Sui dati raw, il clustering cerca pattern naturali nello spazio delle variabili originali. Tuttavia, le alte dimensioni possono rendere difficile identificare cluster chiari. La riduzione dimensionale (PCA lineare o UMAP non lineare) permette di comprimere l’informazione in poche dimensioni interpretabili, evidenziando pattern latenti e migliorando la separabilità visiva. Clustering su dati ridotti può rivelare strutture che non emergono nei dati originali. Confrontare i risultati nei due spazi aiuta a determinare se i cluster sono reali o artefatti della proiezione. È un approccio integrato per validare la solidità dei raggruppamenti e l’informazione utile presente nei dati.
+## CLUSTER UMAP
+
+Per visualizzare la separazione tra gruppi trovati.
+
+```{r, error=TRUE}
+head(umap_df)
+```
+
+
+
+```{r, error=TRUE}
+set.seed(42)
+kmeans_result <- kmeans(umap_df, centers = 3)
+umap_df$cluster <- as.factor(kmeans_result$cluster)
+
+
+library(cluster)
+library(factoextra)
+
+fviz_nbclust(umap_df, kmeans, method = "silhouette")
+
+```
+
+Si prova sia con 3 che con 2 
+
+
+```{r, error=TRUE}
+set.seed(123)  # Per riproducibilità
+kmeans_res <- kmeans(umap_df, centers = 3)
+
+# Aggiungi i cluster al data frame
+umap_df$cluster <- as.factor(kmeans_res$cluster)
+
+
+library(ggplot2)
+
+ggplot(umap_df, aes(x = Dim1, y = Dim2, color = cluster)) +
+  geom_point(size = 2) +
+  theme_minimal() +
+  labs(title = "K-means clustering (k = 2) su UMAP")
+
+```
+
+```{r, error=TRUE}
+data$cluster <- umap_df$cluster
+
+```
+
+```{r, error=TRUE}
+# Variabili continue
+aggregate(. ~ cluster, data = data, FUN = mean, na.rm = TRUE)
+
+
+
+```
+
+```{r, error=TRUE}
+results <- lapply(names(data)[names(data) != "cluster"], function(var) {
+  formula <- as.formula(paste(var, "~ cluster"))
+  model <- aov(formula, data = data)
+  pval <- summary(model)[[1]][["Pr(>F)"]][1]
+  
+  means <- tapply(data[[var]], data$cluster, mean, na.rm = TRUE)
+  
+  data.frame(
+    Variable = var,
+    p_value = round(pval, 5),
+    mean_cluster1 = round(means[1], 2),
+    mean_cluster2 = round(means[2], 2),
+    mean_cluster3 = round(means[3], 2)
+  )
+})
+
+results_df <- do.call(rbind, results)
+results_df <- results_df[order(results_df$p_value), ]
+print(results_df)
+
+```
+
+```{r, error=TRUE}
+library(cluster)
+library(factoextra)
+
+# 1. Prepara i dati da clustering (solo le coordinate UMAP, non il factor cluster)
+coords <- umap_df[, c("Dim1", "Dim2")]
+
+# 2. Calcola la matrice di distanza (euclidea di default)
+diss <- dist(coords)
+
+# 3. Calcola i silhouette
+sil <- silhouette(as.integer(umap_df$cluster), diss)
+
+# 4. Statistica complessiva media
+avg_sil_width <- mean(sil[, "sil_width"])
+cat("Average silhouette width:", round(avg_sil_width, 3), "\n")
+
+# 5. Visualizza il plot delle silhouette
+fviz_silhouette(sil)
+```
+
+## CLUSTER UMAP con k=2
+
+Per visualizzare la separazione tra gruppi trovati.
+
+```{r, error=TRUE}
+head(umap_df)
+```
+
+```{r, error=TRUE}
+set.seed(42)
+kmeans_result <- kmeans(umap_df, centers = 2)
+umap_df$cluster <- as.factor(kmeans_result$cluster)
+
+
+library(cluster)
+library(factoextra)
+
+fviz_nbclust(umap_df, kmeans, method = "silhouette")
+
+```
+
+```{r, error=TRUE}
+set.seed(123)  # Per riproducibilità
+kmeans_res <- kmeans(umap_df, centers = 2)
+
+# Aggiungi i cluster al data frame
+umap_df$cluster <- as.factor(kmeans_res$cluster)
+
+
+library(ggplot2)
+
+ggplot(umap_df, aes(x = Dim1, y = Dim2, color = cluster)) +
+  geom_point(size = 2) +
+  theme_minimal() +
+  labs(title = "K-means clustering (k = 2) su UMAP")
+
+```
+
+```{r, error=TRUE}
+data$cluster <- umap_df$cluster
+
+```
+
+```{r, error=TRUE}
+# Variabili continue
+aggregate(. ~ cluster, data = data, FUN = mean, na.rm = TRUE)
+
+
+
+```
+
+```{r, error=TRUE}
+results <- lapply(names(data)[names(data) != "cluster"], function(var) {
+  formula <- as.formula(paste(var, "~ cluster"))
+  model <- aov(formula, data = data)
+  pval <- summary(model)[[1]][["Pr(>F)"]][1]
+  
+  means <- tapply(data[[var]], data$cluster, mean, na.rm = TRUE)
+  
+  data.frame(
+    Variable = var,
+    p_value = round(pval, 5),
+    mean_cluster1 = round(means[1], 2),
+    mean_cluster2 = round(means[2], 2))
+})
+
+results_df <- do.call(rbind, results)
+results_df <- results_df[order(results_df$p_value), ]
+print(results_df)
+
+```
+
+*CLUSTER 1: ANZIANI CON COMORBIDITÁ* Significativamente piú anziano, cono ASA piu alto, con molto piu presenti variabili come CAD, HF e CVA. In questo cluster sono anche presenti valori per SignetRing. Meno aderenze estese.Meno femmine, piu chirurgie laparoscopiche, tumori piu retto. mAGGIORE DIFFERENZIAZIONE CELLULARE. INTERVALLO MINORE TRA OPERAZIONE CHIRURGICA E MORTE / RECIDIVA. I TUMORI PROGREDISCONO DI MENO, IL GRADO 4A4B É UGUALE
+
+*CLUSTER 2: GIOVANI CON TRATTAMENTI AGGRESSIVI, PEGGIOR OUTCOME*
+
+Valori molto piu alti di CT, RT e NACTRT. Tasso di progressione del tumore molto maggiore, quasi doppio. Tasso di morte maggiore. Marker tunmoreali piú elevati, interventi piu lunghi e piu complessi (meno laparoscopia, tumori piu colon che retto). Tempi piu lunghi prima delle recidive o della mote
+
+```{r, error=TRUE}
+library(cluster)
+library(factoextra)
+
+# 1. Prepara i dati da clustering (solo le coordinate UMAP, non il factor cluster)
+coords <- umap_df[, c("Dim1", "Dim2")]
+
+# 2. Calcola la matrice di distanza (euclidea di default)
+diss <- dist(coords)
+
+# 3. Calcola i silhouette
+sil <- silhouette(as.integer(umap_df$cluster), diss)
+
+# 4. Statistica complessiva media
+avg_sil_width <- mean(sil[, "sil_width"])
+cat("Average silhouette width:", round(avg_sil_width, 3), "\n")
+
+# 5. Visualizza il plot delle silhouette
+fviz_silhouette(sil)
+```
+
+## CLUSTER RAW con viz UMAP
+
+```{r, error=TRUE}
+
+# 2. Clustering
+set.seed(42)
+kmeans_res <- kmeans(data_scaled, centers = 2, nstart = 25)
+
+# 3. UMAP per visualizzare
+umap_out <- umap(data_scaled)
+umap_df <- data.frame(Dim1 = umap_out$layout[,1], Dim2 = umap_out$layout[,2], 
+                      cluster = as.factor(kmeans_res$cluster))
+
+# 4. Visualizzazione
+ggplot(umap_df, aes(x = Dim1, y = Dim2, color = cluster)) +
+  geom_point(size = 2) +
+  labs(title = "Cluster (da dati originali) visualizzati su UMAP")
+
+
+# 1. Calcola la matrice delle distanze (euclidea)
+dist_matrix <- dist(data_scaled)
+
+# 2. Calcola l'indice di silhouette
+library(cluster)
+sil <- silhouette(kmeans_res$cluster, dist_matrix)
+
+# 3. Calcola la silhouette media
+silhouette_score <- mean(sil[, 3])
+print(paste("Indice di Silhouette medio:", round(silhouette_score, 3)))
+
+
+```
+
+## CLUSTER PCA
+
+```{r, error=TRUE}
+# PCA
+pca <- prcomp(data_scaled)
+# Scegli le prime N componenti che spiegano >80% varianza
+summary(pca)
+
+# Prendiamo per esempio le prime 10
+pca_data <- as.data.frame(pca$x[, 1:10])
+
+# K-means su PCA
+kmeans_res <- kmeans(pca_data, centers = 2)
+
+```
+
+```{r, error=TRUE}
+# Riduci i dati a 18 componenti principali
+pca_data <- as.data.frame(pca$x[, 1:17])
+
+# K-means clustering sui dati ridotti
+set.seed(42)
+kmeans_res <- kmeans(pca_data, centers = 2, nstart = 25)
+
+# Visualizza i cluster su UMAP
+umap_out <- umap(pca_data)
+umap_df <- data.frame(Dim1 = umap_out$layout[,1], Dim2 = umap_out$layout[,2], 
+                      cluster = as.factor(kmeans_res$cluster))
+
+# Visualizzazione
+library(ggplot2)
+ggplot(umap_df, aes(x = Dim1, y = Dim2, color = cluster)) +
+  geom_point(size = 2) +
+  labs(title = "Cluster sui primi 18 componenti principali")
+
+```
+
+```{r, error=TRUE}
+library(cluster)
+sil <- silhouette(kmeans_res$cluster, dist(pca_data))
+mean(sil[, 3])  # silhouette score medio
+
+```
+
+```{r, error=TRUE}
+skim_without_charts(data)
+```
+
+## K MEANS raw
+
+```{r, error=TRUE}
+
+data$cluster <- NULL
+data_scaled <- scale(data)
+
+# Elbow plot per scegliere k
+fviz_nbclust(data_scaled, kmeans, method = "wss")
+
+
+set.seed(123)
+kmeans_res <- kmeans(data_scaled, centers = 2, nstart = 25)
+
+# Visualizzazione
+fviz_cluster(kmeans_res, data = data_scaled,
+             ellipse.type = "convex",
+             palette = "jco",
+             ggtheme = theme_minimal())
+
+```
+
+```{r, error=TRUE}
+kmeans_res$centers
+```
+
+```{r, error=TRUE}
+data$cluster <- as.factor(kmeans_res$cluster)
+
+# Riassunto per cluster
+aggregate(. ~ cluster, data = data, mean)
+summary(data$cluster)
+```
+
+```{r, error=TRUE}
+library(dplyr)
+library(reshape2)
+library(ggplot2)
+
+# Elenco delle variabili di interesse (includi qui quelle che vuoi nel grafico)
+vars_of_interest <- c(
+  "cluster", "Liver_Only", "Lymphovascularinvasion", 
+  "perineural", "Death", "EA", "CT", "RT", "NACTRT",
+  "Age", "LogCEA", "IntervalOR", "IntervalOD", "Progress", "Cell_diff", "Mucin_TYPE"
+)
+
+# Seleziona solo queste variabili
+data_subset <- data[, vars_of_interest]
+
+# Calcola media per cluster
+cluster_means <- data_subset %>%
+  group_by(cluster) %>%
+  summarise(across(everything(), mean, na.rm = TRUE)) %>%
+  ungroup()
+
+# Normalizza ciascuna colonna (esclusa 'cluster') in percentuale rispetto al suo massimo
+cluster_means_scaled <- cluster_means
+cluster_means_scaled[-1] <- lapply(cluster_means_scaled[-1], function(x) 100 * x / max(x, na.rm = TRUE))
+
+# Melting per ggplot
+df_melt <- melt(cluster_means_scaled, id = "cluster")
+
+# Grafico
+ggplot(df_melt, aes(x = variable, y = value, fill = cluster)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 0.5)) +
+  labs(
+    title = "Cluster comparison (all variables scaled as % of max)",
+    x = "Variable",
+    y = "Value (% of max)"
+  )
+
+
+
+```
+
+## HAC
+
+```{r, error=TRUE}
+# Pacchetti
+library(factoextra)
+library(dplyr)
+
+
+# Calcola distanza euclidea
+dist_mat <- dist(data, method = "euclidean")
+
+# Clustering gerarchico con metodo Ward
+hc <- hclust(dist_mat, method = "ward.D2")
+
+# Dendrogramma con taglio a k = 2
+fviz_dend(hc, k = 2, 
+          rect = TRUE, 
+          rect_border = "jco",
+          rect_fill = TRUE,
+          show_labels = FALSE)
+
+# Assegna i cluster al dataset
+data$cluster_hc <- cutree(hc, k = 2)
+
+
+```
+
+### METRICHE INTERNE per Kmeans e HAC
+
+```{r, error=TRUE}
+library(cluster)      # silhouette
+library(clusterSim)   # Davies-Bouldin
+library(factoextra)   # fviz_silhouette
+library(dplyr)        # per operazioni su dataframe
+
+# -----------------------------
+# SILHOUETTE SCORE
+# -----------------------------
+
+# HAC
+sil_hc <- silhouette(data$cluster_hc, dist(data_scaled))
+fviz_silhouette(sil_hc) + ggtitle("Silhouette - Hierarchical")
+mean(sil_hc[, 3])  # Average silhouette for HAC
+
+# K-means
+sil_km <- silhouette(kmeans_res$cluster, dist(data_scaled))
+fviz_silhouette(sil_km) + ggtitle("Silhouette - K-means")
+mean(sil_km[, 3])  # Average silhouette for K-means
+
+# -----------------------------
+# DAVIES-BOULDIN INDEX
+# -----------------------------
+
+# HAC
+db_hc <- index.DB(data_scaled, cl = data$cluster_hc, centrotypes = "centroids")$DB
+
+# K-means
+db_km <- index.DB(data_scaled, cl = kmeans_res$cluster, centrotypes = "centroids")$DB
+
+# -----------------------------
+# RISULTATI
+# -----------------------------
+
+cat("Silhouette HAC: ", mean(sil_hc[,3]), "\n")
+cat("Silhouette K-means: ", mean(sil_km[,3]), "\n\n")
+
+cat("Davies-Bouldin HAC: ", db_hc, "\n")
+cat("Davies-Bouldin K-means: ", db_km, "\n")
+
+```
+
+Si conferma che i cluster non sono ben separati nello spazio originale ad alta dimensionalitá.
+
+## RISULTATI CLUSTERING:
+
+Si conclude che il dataset non presenza strutture di cluster. Le metriche Silhouette e Davies- Bouldin indicano che i cluster non sono ne ben separati ne ben definiti, senza coesione interna. A prescindere dall'algoritmo scelto, si conclude l'analisi inconcludente. Si sottoline ahce, nonstante il valore accettabile di 0.5 della UMAP + k-means, UMAP deforma lo spazio, quindi non édetto che i cluster trovati riflettano correttamente la separazione dei dati originali. Il dataset non mostra una struttura di cluster ben definita nello spazio originale o nello spazio ridotto da PCA. Solo dopo proiezioni non lineari (UMAP), è possibile forzare una divisione con significato visivo, ma non necessariamente supportata da buona separabilità intrinseca.
+
+```{r, error=TRUE}
+data$cluster2 <- NULL
+data$cluster_hc <- NULL
+data$cluster <- NULL
+```
+
+# LINEAR REGRESSION
+
+```{r, error=TRUE}
+summary(step(lm(Death ~., data = data)))
+```
+
+R\^2 0.136, basso. solo il 13.6 percento della varianza di morte éspiegato dalle variabili indipendenti. AIC buono, piú basso meglio é. F statistics: 13.59 con pvalue nullo, il modello complessivo é statisticamente molto significativo. con 905 dof il modello érobusto.
+
+INTERPRETAZIONE COEFFICENTI Intercept 0.289 \*\* Valore atteso di Death quando tutti i predittori sono a zero. LogCEA 0.047 \*\* Aumento del logaritmo del CEA (log10): associato ad aumento del rischio di morte. RBC 0.076 \*\*\* Più unità trasfuse, maggiore è la probabilità di morte. NACTRT -0.087 \* Aver fatto chemio/radioterapia neoadiuvante è associato a minor rischio di morte. Progress 0.258 \*\*\* Malattia in progressione: fortemente associata a mortalità più alta. IntervalOD -0.0036 \*\*\* Intervallo tra intervento e morte: più lungo = rischio minore. AJCC_bin 0.0786 \* Stadio AJCC binarizzato: stadio più avanzato → rischio maggiore.
+
+## LOGISTIc REGRESSION
+
+```{r, error=TRUE}
+# GLM logistica binaria
+glm_model <- glm(
+  Death ~ .,
+  data = data,
+  family = binomial(link = "logit")
+)
+
+final <-(step(glm_model))
+summary(final)
+```
+
+### ODDS RATIO
+
+```{r, error=TRUE}
+exp(cbind(OR= coef(final), confint(final)))
+```
+
+```{r, error=TRUE}
+# Calcola OR e intervalli di confidenza
+or_ci <- exp(cbind(OR= coef(final), confint(final)))
+# Crea un data frame ordinato
+or_df <- as.data.frame(or_ci)
+or_df$Variable <- rownames(or_df)
+colnames(or_df) <- c("OR", "CI_low", "CI_high", "Variable")
+
+# Ordina per OR o per significatività, se preferisci
+or_df <- or_df[order(or_df$OR, decreasing = TRUE), ]
+
+# Carica ggplot2
+library(ggplot2)
+
+# Plot
+ggplot(or_df, aes(x = reorder(Variable, OR), y = OR)) +
+  geom_point(color = "orange4", size = 3) +
+  geom_errorbar(aes(ymin = CI_low, ymax = CI_high), width = 0.2, color = "grey40") +
+  geom_hline(yintercept = 1, linetype = "dashed", color = "red") +
+  coord_flip() +  # Inverte gli assi per leggibilità
+  labs(title = "Odds Ratio con Intervallo di Confidenza (95%)",
+       x = "Variabile",
+       y = "Odds Ratio") +
+  theme_minimal(base_size = 12)
+
+```
+
+OR = 1 → Nessuna associazione con l'outcome. CEA, ID, ANESTIME, INTERVAL
+
+OR \> 1 → La variabile è associata a un aumento della probabilità dell'evento (es. progressione). ANESTIME, PROGRESS, RADIOTHERAPY, DIABETES, AJCC
+
+OR \< 1 → La variabile è associata a una diminuzione della probabilità dell'evento. INTERCETTA
+
+# SURVIVAL ANALYSIS
+
+## PREPARAZIONE DEL DATASET
+
+```{r, error=TRUE}
+
+library(survival)
+library(survminer)
+library(dplyr)
+
+
+# senza le variabili tempo ed evento
+data_covariates <- subset(data, select = -c(IntervalOD, Death))
+```
+
+```{r, error=TRUE}
+# Creazione dell'oggetto Surv: tempo = Interval (in mesi), evento = Death (1=evento, 0=censura)
+surv_object <- Surv(time = data$IntervalOD, event = data$Death)
+summary(surv_object)
+
+```
+
+## KAPLAN MEIER CURVE - CURVA COMPLESSIVA SOPRAVVIVENZA
+
+```{r, error=TRUE}
+library(survival)
+library(survminer)
+
+# Opzione 1 - Con Surv e formula (raccomandata)
+km_fit <- survfit(Surv(IntervalOD, Death) ~ 1, data = data)
+ggsurvplot(km_fit, data = data, conf.int = TRUE, risk.table = TRUE, pval = TRUE,
+           ggtheme = theme_minimal(), title = "Kaplan-Meier curve - Overall Survival")
+
+
+```
+
+## KAPLAN MEIER - variabili
+
+```{r, error=TRUE}
+library(survival)
+library(survminer)
+
+# Controlla che la variabile sia presente e corretta
+colnames(data)
+str(data$ASA3)
+
+# Se necessario, converti ASA3 in fattore
+data$ASA3 <- as.factor(data$ASA3)
+
+# Creazione formula e fit
+km_fit_ASA3 <- survfit(Surv(IntervalOD, Death) ~ ASA3, data = data)
+
+# Plot Kaplan-Meier
+ggsurvplot(km_fit_ASA3, data = data,
+           conf.int = TRUE, risk.table = TRUE, pval = TRUE,
+           ggtheme = theme_minimal(),
+           title = "Kaplan-Meier curve by ASA3",
+           legend.title = "ASA3")
+
+```
+
+```{r, error=TRUE}
+data$Gender <- as.factor(data$Gender)
+km_fit_Gender <- survfit(Surv(IntervalOD, Death) ~ Gender, data = data)
+ggsurvplot(km_fit_Gender, data = data,
+           conf.int = TRUE, risk.table = TRUE, pval = TRUE,
+           ggtheme = theme_minimal(),
+           title = "Kaplan-Meier curve by Gender",
+           legend.title = "Gender")
+
+```
+
+```{r, error=TRUE}
+data$TumorLOC <- as.factor(data$TumorLOC)
+km_fit_TumorLOC <- survfit(Surv(IntervalOD, Death) ~ TumorLOC, data = data)
+ggsurvplot(km_fit_TumorLOC, data = data,
+           conf.int = TRUE, risk.table = TRUE, pval = TRUE,
+           ggtheme = theme_minimal(),
+           title = "Kaplan-Meier curve by Tumor Location",
+           legend.title = "TumorLOC")
+
+```
+
+```{r, error=TRUE}
+data$AJCC_bin <- as.factor(data$AJCC_bin)
+km_fit_AJCC <- survfit(Surv(IntervalOD, Death) ~ AJCC_bin, data = data)
+ggsurvplot(km_fit_AJCC, data = data,
+           conf.int = TRUE, risk.table = TRUE, pval = TRUE,
+           ggtheme = theme_minimal(),
+           title = "Kaplan-Meier curve by AJCC_bin",
+           legend.title = "AJCC_bin")
+
+```
+
+AJCC_bin
+
+P-value \< 0.0001 → differenza statisticamente significativa tra i gruppi 0 e 1.
+
+Sopravvivenza marcatamente migliore per AJCC_bin=0. Interpretazione: Lo stadio AJCC è fortemente associato alla sopravvivenza, come atteso.
+
+TumorLOC
+
+P-value = 0.097 → non significativo.
+
+Differenze modeste tra localizzazione colon/retto. Interpretazione: La sede del tumore sembra avere un impatto limitato sulla sopravvivenza.
+
+Gender
+
+P-value = 0.98 → non significativo.
+
+Curve sovrapponibili. Interpretazione: Nessuna differenza di sopravvivenza tra uomini e donne.
+
+ASA3
+
+P-value \< 0.0001 → differenza significativa.
+
+Sopravvivenza inferiore nei pazienti ASA3=1 (compromessi). Interpretazione: Lo stato clinico pre-operatorio è un predittore importante.
+
+Overall survival
+
+Curve uniche, senza confronto. Interpretazione: Quadro generale di sopravvivenza della popolazione.
+
+LOG RANK TEST
+
+```{r, error=TRUE}
+library(survival)
+
+# ASA3
+cat("\n=== Log-Rank Test per ASA3 ===\n")
+survdiff(Surv(IntervalOD, Death) ~ ASA3, data = data)
+
+# Gender
+cat("\n=== Log-Rank Test per Gender ===\n")
+survdiff(Surv(IntervalOD, Death) ~ Gender, data = data)
+
+# TumorLOC
+cat("\n=== Log-Rank Test per TumorLOC ===\n")
+survdiff(Surv(IntervalOD, Death) ~ TumorLOC, data = data)
+
+# AJCC_bin
+cat("\n=== Log-Rank Test per AJCC_bin ===\n")
+survdiff(Surv(IntervalOD, Death) ~ AJCC_bin, data = data)
+
+```
+
+LOG RANK TEST ANALISI:
+
+1.  ASA3 Chi-squared = 16.4, p = 5e-05 (molto significativo).
+
+Interpretazione: La differenza di sopravvivenza tra pazienti ASA3=0 (basso rischio) e ASA3=1 (alto rischio) è significativa. I pazienti ASA3=1 hanno una sopravvivenza inferiore.
+
+2.  Gender Chi-squared ≈ 0, p = 1 (non significativo).
+
+Interpretazione: Nessuna differenza di sopravvivenza tra uomini (Gender=1) e donne (Gender=2).
+
+3.  TumorLOC Chi-squared = 2.7, p ≈ 0.1 (non significativo).
+
+Interpretazione: La localizzazione del tumore (colon vs retto) mostra una differenza non significativa. Potrebbe esserci una tendenza, ma non è statisticamente rilevante.
+
+4.  AJCC_bin Chi-squared = 80.4, p \< 2e-16 (altamente significativo).
+
+Interpretazione: Lo stadio AJCC è fortemente associato alla sopravvivenza. I pazienti con AJCC_bin=1 (stadio avanzato) hanno una sopravvivenza significativamente inferiore rispetto a quelli con AJCC_bin=0.
+
+
+## COX MODEL MULTIVARIATO BASE
+
+```{r, error=TRUE}
+library(survival)
+# Costruisci il modello di Cox correttamente
+cox_model <- survival::coxph(Surv(time = data$IntervalOD, event = data$Death) ~ ., data = data_covariates)
+
+# Riepilogo
+summary(cox_model)
+
+library(car)
+vif(cox_model)
+
+```
+
+-   AJCC_bin e ASA3 sono predittori forti e confermano le curve Kaplan-Meier e il log-rank test.
+-   LogCEA e Cell_diff forniscono informazioni cliniche aggiuntive.
+-   CT e Progress mostrano effetti protettivi, da interpretare in chiave clinica.
+
+| Variabile                   | HR   | IC 95%         | p-value          | Interpretazione                                                       |
+|-----------|-----------|-----------|-----------|----------------------------|
+| **ASA3**                    | 1.39 | (1.10 -- 1.77) | 0.0066 (\*\*)    | Rischio +39% per ASA3=1 (alto rischio clinico)                        |
+| **LogCEA**                  | 1.34 | (1.19 -- 1.50) | 1e-06 (\*\*\*)   | Rischio +34% per unità di logCEA                                      |
+| **RBC**                     | 1.32 | (1.12 -- 1.55) | 0.0007 (\*\*\*)  | Rischio +32% per trasfusioni più alte                                 |
+| **Cell_diff**               | 2.01 | (1.47 -- 2.76) | 1.5e-05 (\*\*\*) | Rischio raddoppiato per differenziazione sfavorevole                  |
+| **Lymphovascularinvasion**  | 1.31 | (1.04 -- 1.64) | 0.0205 (\*)      | Rischio +31% con invasione linfovascolare                             |
+| **CT (chemioterapia)**      | 0.40 | (0.25 -- 0.63) | 9e-05 (\*\*\*)   | Rischio -60%, effetto protettivo                                      |
+| **Progress (progressione)** | 0.26 | (0.17 -- 0.41) | 6e-09 (\*\*\*)   | Rischio -74%, effetto protettivo (attenzione: variabile temporale)    |
+| **IntervalOR (tempo)**      | 0.91 | (0.89 -- 0.92) | \<2e-16 (\*\*\*) | Effetto del tempo: con l'aumentare del follow-up, rischio decrescente |
+| **AJCC_bin**                | 2.22 | (1.60 -- 3.08) | 1.7e-06 (\*\*\*) | Rischio più che raddoppiato per AJCC_bin=1                            |
+
+BONTA DEL MODELLO
+
+```{r, error=TRUE}
+summary(cox_model)$concordance
+
+```
+
+modello discrimina molto bene, predice bene la sopravvivenza rispetto ai tempi osservati al 80%
+
+### TEST DI PROPORZIONALITA DEI RISCHI nel tempo
+
+```{r, error=TRUE}
+cox.zph(cox_model)
+
+```
+
+GLOBAL: il modello, nel suo complesso, viola la ipotesi di proporzionalitá dei rischi :(
+
+Si visualizzana la curva di SCHOENFELD per una diagnosi grafica
+
+```{r, error=TRUE}
+cox.zph_test <- cox.zph(cox_model)
+
+
+ggcoxzph(cox.zph_test)
+
+# Residui martingala (per outliers)
+ggcoxdiagnostics(cox_model, type = "martingale", linear.predictions = FALSE)
+
+# Residui deviance (per influenze)
+ggcoxdiagnostics(cox_model, type = "deviance", linear.predictions = FALSE)
+
+# Forest plot
+ggforest(cox_model, data = data)
+```
+
+IPOTESI DI PROPORZIONALITÁ VIOLATA PER ALMENO UNA VARIABILE! Martingale residuals mostrano punti fuori dalla fascia ±3: possibili outlier o influenze estreme.Deviance residuals confermano questa tendenza: controlla osservazioni con residui estremi.
+
+Variabili significative (es. con p \< 0.05) mostrano:
+
+-   HR \> 1 → aumento del rischio (ASA3, LogCEA, RBC, Cell_diff, AJCC_bin);
+
+-   HR \< 1 → effetto protettivo (CT, Progress, IntervalOR).
+
+Variabili come Gender, TumorLOC non significative.
+
+## SEMPLIFICAZIONE COX - SIGNIFICATIVE VARIABLES
+
+```{r, error=TRUE}
+cox_simplified <- coxph(Surv(IntervalOD, Death) ~ ASA3 + LogCEA + RBC + 
+                          Cell_diff + Lymphovascularinvasion + CT + 
+                          Progress + IntervalOR + AJCC_bin, data = data)
+
+summary(cox_simplified)
+exp(coef(cox_simplified))            # HR
+exp(confint(cox_simplified))         # IC 95%
+
+```
+
+```{r, error=TRUE}
+# Diagnostica proporzionalità
+cox.zph_test <- cox.zph(cox_simplified)
+print(cox.zph_test)
+ggcoxzph(cox.zph_test)
+
+
+```
+
+## STRATIFIED COX
+
+si note cha le variabili IntervalOR, Progress e forse LogCEA e AJCC bin
+
+```{r, error=TRUE}
+# Modello Cox con stratificazione
+cox_stratified <- coxph(Surv(IntervalOD, Death) ~ ASA3 + LogCEA + RBC + 
+                          Cell_diff + Lymphovascularinvasion + CT + 
+                          strata(Progress) + strata(AJCC_bin) + strata(IntervalOR), data = data)
+
+summary(cox_stratified)
+
+cox.zph(cox_stratified)
+```
+
+-   **LogCEA** e **ASA3** rimangono significativi anche nel modello stratificato.
+
+
+-   La stratificazione su **AJCC_bin** e **IntervalOR** riduce l'effetto apparente di altre variabili, perché il modello assume che queste abbiano effetti di base separati.
+
+NOTA BENE: C = 68.1 %, la concordanza é scesa ripstto al modello precedente perce la stratificazione elimina l'effetto delle variabili stratificate dal calcolo del rischio.
+
+
+
+## TIME DEPENDENT
+
+IMPOSTANDO PROGRESSO 0 PRIMA DEL PROGRESSO E PROGRESSO 1 DOPO IL PROGRESSO.
+INtervallo da O (operazione) a R (recidiva) é il tempo continuo di follow up prima del progresso 
+
+
+```{r, error=TRUE}
+library(survival)
+
+# Crea ID univoco per pazienti
+data$id <- 1:nrow(data)
+
+# Assicuriamoci che Progress sia 1=evento, 0=non avvenuto
+data$Progress_event <- ifelse(data$Progress == 1, 1, 0)
+
+```
+
+```{r, error=TRUE}
+# Step 1: dataset iniziale per morte
+td_data <- tmerge(data1 = data, data2 = data,
+                  id = id,
+                  death = event(IntervalOD, Death))
+
+# Step 2: aggiungi Progress come evento time-dependent
+td_data <- tmerge(data1 = td_data, data2 = data,
+                  id = id,
+                  Progress_td = tdc(IntervalOR))
+
+# Step 3: controlla il dataset risultante
+head(td_data)
+
+```
+
+```{r, error=TRUE}
+cox_td <- coxph(Surv(tstart, tstop, death) ~ ASA3 + LogCEA + RBC +
+                  Cell_diff + Lymphovascularinvasion + CT + Progress_td +
+                  strata(AJCC_bin), data = td_data)
+
+summary(cox_td)
+
+```
+
+```{r, error=TRUE}
+table(td_data$Progress_td)
+
+```
+
+```{r, error=TRUE}
+cox.zph(cox_td)
+```
+
+ASA3 VIOLA, CELL_DIFF VIOLA, INVASIONE LINFO VIOLA, COMPLESSIVAMENTE VIOLATE
+
+
+## PENALIZED COX
+Si utilizza glmnet per penalizzazione ridge per ridurre varianza gestire multicoll. COX base é instabile, i coef saranno estretti con exp() per ottenere HR
+```{r, error=TRUE}
+library(glmnet)
+library(survival)
+
+# Prepara la matrice X e il vettore y (tempo + evento)
+X <- model.matrix(~ ASA3 + LogCEA + RBC + Cell_diff + Lymphovascularinvasion + CT + Progress_td, data=td_data)[,-1]
+y <- Surv(td_data$tstart, td_data$tstop, td_data$death)
+
+# Cox Lasso (alpha=1), puoi anche usare Ridge (alpha=0) o Elastic Net
+cvfit <- cv.glmnet(X, y, family="cox", alpha=1)
+
+# Visualizza i coefficienti penalizzati
+coef(cvfit, s="lambda.min")
+
+```
+
+
+RIDGE PENALIZED COX:
+i coeffcienti stimate rappresentano l'effetto delle covariate sul logaritmo dell rischio di un evento. Il coefficiente positivo indica un aumento del rischio associato all'aumento della covariata, negativo viceversa.
+
+COEFFICIENTI:
+ASA31: 0.243 → HR ≈ exp(0.243) ≈ 1.275
+
+LogCEA: 0.340 → HR ≈ exp(0.340) ≈ 1.405
+
+RBC: 0.211 → HR ≈ exp(0.211) ≈ 1.235
+
+Cell_diff: 0.707 → HR ≈ exp(0.707) ≈ 2.028
+
+Lymphovascularinvasion: 0.343 → HR ≈ exp(0.343) ≈ 1.409
+
+CT: -1.535 → HR ≈ exp(-1.535) ≈ 0.216, coefficiente negativo, suggerendo un effetto protettivo.
+
+Progress_td: 2.410 → HR ≈ exp(2.410) ≈ 11.13, effetto molto forte, con un hazard ratio (HR) superiore a 11, indicando che la progressione della malattia è fortemente associata a un aumento del rischio di morte.
+
+
+## Additive Aalen
+
+permette di stimare effetti che variano nel tempo
+
+```{r, error=TRUE}
+library(timereg)
+aalen_model <- aalen(Surv(tstart, tstop, death) ~ ASA3 + LogCEA + RBC + Cell_diff + 
+                     Lymphovascularinvasion + CT + Progress_td, data=td_data)
+summary(aalen_model)
+
+```
+
+1- TEST SIGNIFICATIVITÁ
+
+test del supremum mostra che le seguenti variabili hanno effetti significativamente diversi da zero:
+
+ASA31: p = 0.013
+
+LogCEA: p < 0.001
+
+RBC: p = 0.008
+
+Cell_diff: p < 0.001
+
+Lymphovascularinvasion: p = 0.001
+
+CT: p = 0.003
+
+Progress_td: p < 0.001
+
+2 - TEST COSTANZA EFFETTO NEL TEMPO
+
+Kolmodoroff smirnov, indica che LOGCEA, CELL DIFF, LINFO VASCOLARIZZAZIONE, CT E PROGRESS TD anno effetti che variano nel tempo
+
+Progress_td mostra un effetto significativamente variabile nel tempo, suggerendo che l'impatto della progressione della malattia sul rischio di morte cambia durante il follow-up.
+
+CT e Cell_diff presentano effetti temporali non costanti, indicando che il loro impatto sul rischio varia nel tempo.
+
+
+
+
+## anestime stratified kaplan meier
+```{r}
+library(survival)
+library(survminer)
+
+# Creiamo una variabile di gruppo per AnesTime
+data$AnesTime_group <- ifelse(data$AnesTime > median(data$AnesTime, na.rm = TRUE), 'High', 'Low')
+
+# Definiamo l'oggetto di sopravvivenza
+surv_object <- Surv(time = data$IntervalOD, event = data$Death)
+
+# Fit del modello Kaplan-Meier
+fit_km <- survfit(surv_object ~ AnesTime_group, data = data)
+
+# Visualizziamo la curva KM
+ggsurvplot(fit_km, data = data, pval = TRUE, conf.int = TRUE,
+           title = "Kaplan-Meier Curve: AnesTime High vs Low",
+           xlab = "Months",
+           ylab = "Survival Probability")
+
+```
+
+Non osserviamo differenze statisticamente significative nella sopravvivenza tra pazienti con AnesTime alto rispetto a quelli con AnesTime basso. Questo suggerisce che il tempo di anestesia, isolatamente, non è un fattore predittivo della sopravvivenza in questo dataset.
+
+## Proportional hazard anes time
+
+```{r}
+# Modello Cox con AnesTime come predittore continuo
+cox_AnesTime <- coxph(surv_object ~ AnesTime, data = data)
+summary(cox_AnesTime)
+
+# Se vogliamo interpretare HR per unità di tempo maggiore (es. per 30 minuti in più):
+data$AnesTime_per30 <- data$AnesTime / 30
+cox_AnesTime30 <- coxph(surv_object ~ AnesTime_per30, data = data)
+summary(cox_AnesTime30)
+
+
+```
+
+Il tempo di anestesia, isolato, non mostra un effetto statisticamente significativo sulla sopravvivenza in questa coorte. Anche se l’hazard ratio è <1 (suggerendo un trend di minore rischio con più AnesTime), il risultato è debole e non significativo.
+
+
+```{r}
+library(survival)
+library(survminer)
+
+# 📊 Modello Cox multivariato con variabili cliniche e AnesTime
+cox_multivar <- coxph(surv_object ~ AnesTime + ASA3 + LogCEA + RBC + EA + Liver_Only + AJCC_bin, data = data)
+summary(cox_multivar)
+
+# 📊 Diagnostica proporzionalità (Schoenfeld residuals)
+cox_zph <- cox.zph(cox_multivar)
+print(cox_zph)
+
+# Visualizza test di proporzionalità
+plot(cox_zph)
+
+# 📊 Visualizza curve di sopravvivenza stratificate per AnesTime e altre variabili (opzionale)
+# Esempio con AnesTime suddiviso sopra/sotto mediana
+data$AnesTime_group <- ifelse(data$AnesTime > median(data$AnesTime, na.rm = TRUE), 'High', 'Low')
+fit_km <- survfit(surv_object ~ AnesTime_group, data = data)
+ggsurvplot(fit_km, data = data, pval = TRUE, conf.int = TRUE,
+           title = "Kaplan-Meier Curve: AnesTime High vs Low")
+
+```
+
+AnesTime: HR = 0.9992 (per minuto), p = 0.049, quindi marginalmente significativo. La riduzione del rischio per unità di AnesTime è minima, ma statisticamente rilevante.
+
+ASA3: HR = 1.40, p = 0.0015 – conferma un aumento significativo del rischio per pazienti con peggiore stato fisico.
+
+LogCEA: HR = 1.44, p < 0.001 – aumenta il rischio con l’incremento del marker tumorale.
+
+RBC: HR = 1.33, p < 0.001 – le trasfusioni sono associate a un rischio maggiore.
+
+EA: HR = 0.85, p = 0.24 – effetto protettivo, ma non significativo.
+
+Liver_Only: HR = 1.37, p = 0.058 – marginalmente non significativo.
+
+AJCC_bin: HR = 2.92, p < 0.001 – lo stadio del tumore è fortemente predittivo della sopravvivenza.
+
+Concordance = 0.697 – il modello discrimina bene tra chi sopravvive e chi no.
+
+AnesTime ha un effetto molto debole, anche se borderline significativo nel modello multivariato (p=0.049). La sua interpretazione clinica è limitata, poiché l’hazard ratio indica solo una variazione di rischio <1% per ogni minuto in più.
+
+ASA3, LogCEA, RBC e AJCC_bin sono predittori robusti e significativi, confermando i loro ruoli clinici ben noti.
+
+Il modello complessivo è valido e ben calibrato, con una buona concordance e senza violazioni di proporzionalità.
+
+
+# Supervised learning SENZA BILANCIAMENTO
+
+Logistic Regression
+
+Random Forest
+
+XGBoost
+
+SVM
+
+K-NN
+
+## DIVISIONE TRAIN/TEST
+
+```{r, error=TRUE}
+set.seed(123)
+library(caret)
+train_index <- createDataPartition(data$Death, p = 0.8, list = FALSE)
+train_data <- data[train_index, ]
+test_data <- data[-train_index, ]
+
+#-----------aggiunta post 
+train_data$Death <- as.factor(train_data$Death)
+test_data$Death <- as.factor(test_data$Death)
+
+```
+
+## LOGISTIC REGRESSION
+
+```{r, error=TRUE}
+
+
+# Training della logistic regression
+set.seed(123)
+logit_model <- train(
+  Death ~ ., 
+  data = train_data,
+  method = "glm",
+  family = "binomial",
+  trControl = trainControl(method = "none")  # niente cross-validation per ora, step successivo
+)
+
+```
+
+```{r, error=TRUE}
+# Predizione delle classi
+pred_class <- predict(logit_model, newdata = test_data)
+
+# Predizione delle probabilità (per AUC)
+pred_prob <- predict(logit_model, newdata = test_data, type = "prob")
+
+# Confusion Matrix
+conf_mat <- confusionMatrix(pred_class, test_data$Death)
+print(conf_mat)
+
+
+# AUC con pROC
+library(pROC)
+
+
+roc_obj <- roc(test_data$Death, pred_prob[, 2])
+auc(roc_obj)
+
+
+summary(logit_model$finalModel)
+
+```
+
+Si nota che la maggior parte delle variabili non sono statisticamente significative. Si utilizza la funzione step() per fare una stepwise selection
+
+```{r, error=TRUE}
+
+
+# 1. Modello iniziale completo
+full_model <- glm(Death ~ ., data = train_data, family = "binomial")
+
+# 2. Selezione stepwise (AIC)
+step_model <- step(full_model, direction = "both", trace = FALSE)
+
+# 3. Sommario del modello selezionato
+summary(step_model)
+
+
+
+```
+
+```{r, error=TRUE}
+
+# Predizioni su test
+pred_prob <- predict(step_model, newdata = test_data, type = "response")
+pred_class <- ifelse(pred_prob > 0.5, "1", "0")
+pred_class <- factor(pred_class, levels = levels(test_data$Death))
+
+# Confusion matrix
+confusionMatrix(pred_class, test_data$Death)
+
+# AUC
+library(pROC)
+roc_obj <- roc(test_data$Death, pred_prob)
+auc(roc_obj)
+
+```
+
+
+## RANDOM FOREST
+
+Si inizia con una k fold
+
+```{r, error=TRUE}
+# Rinominare i livelli della variabile target
+train_data$Death <- factor(train_data$Death, levels = c("0", "1"), labels = c("No", "Yes"))
+test_data$Death  <- factor(test_data$Death,  levels = c("0", "1"), labels = c("No", "Yes"))
+
+```
+
+```{r, error=TRUE}
+library(caret)
+set.seed(123)
+
+rf_model <- train(
+  Death ~ .,
+  data = train_data,
+  method = "rf",
+  trControl = trainControl(
+    method = "cv",
+    number = 5,
+    classProbs = TRUE,
+    summaryFunction = twoClassSummary
+  ),
+  metric = "ROC"
+)
+
+```
+
+```{r, error=TRUE}
+# Predizioni
+pred_class <- predict(rf_model, newdata = test_data)
+pred_prob <- predict(rf_model, newdata = test_data, type = "prob")
+
+# Confusion matrix
+confusionMatrix(pred_class, test_data$Death)
+
+# AUC
+library(pROC)
+roc_obj <- roc(test_data$Death, pred_prob[, "Yes"])  # o [, "1"] se usi 0/1
+auc(roc_obj)
+
+```
+
+```{r, error=TRUE}
+varImp(rf_model)
+
+```
+
+Si procede facendo tuning degli iperparametri, con mtry, numero di alber etc. dopo il fit di base.
+
+```{r, error=TRUE}
+set.seed(123)
+mtry_grid <- expand.grid(mtry = c(2, 4, 6, 8, 10))
+```
+
+```{r, error=TRUE}
+rf_model_tuned <- train(
+  Death ~ .,
+  data = train_data,
+  method = "rf",
+  trControl = trainControl(
+    method = "cv",
+    number = 5,
+    classProbs = TRUE,
+    summaryFunction = twoClassSummary,
+    verboseIter = TRUE
+  ),
+  metric = "ROC",
+  tuneGrid = mtry_grid,
+  ntree = 500  
+)
+
+```
+
+```{r, error=TRUE}
+# Visualizza la tabella con performance per ciascun mtry
+print(rf_model_tuned)
+plot(rf_model_tuned)
+
+# Predizioni
+pred_rf <- predict(rf_model_tuned, newdata = test_data)
+probs_rf <- predict(rf_model_tuned, newdata = test_data, type = "prob")
+
+# Confusion matrix
+confusionMatrix(pred_rf, test_data$Death)
+
+# AUC
+library(pROC)
+roc_obj <- roc(test_data$Death, probs_rf[,"Yes"])
+auc(roc_obj)
+
+```
+
+```{r, error=TRUE}
+varImp(rf_model_tuned)
+
+```
+
+## XGBoost
+
+```{r, error=TRUE}
+train_data$Death <- factor(train_data$Death, levels = c("No", "Yes"))
+test_data$Death  <- factor(test_data$Death, levels = c("No", "Yes"))
+
+```
+
+```{r, error=TRUE}
+set.seed(123)
+
+xgb_grid <- expand.grid(
+  nrounds = c(100, 200),
+  max_depth = c(3, 6),
+  eta = c(0.01, 0.1, 0.3),
+  gamma = 0,
+  colsample_bytree = 1,
+  min_child_weight = 1,
+  subsample = 1
+)
+
+xgb_model <- train(
+  Death ~ .,
+  data = train_data,
+  method = "xgbTree",
+  trControl = trainControl(
+    method = "cv",
+    number = 5,
+    classProbs = TRUE,
+    summaryFunction = twoClassSummary,
+    verboseIter = TRUE
+  ),
+  metric = "ROC",
+  tuneGrid = xgb_grid
+)
+
+```
+
+```{r, error=TRUE}
+# Predizioni
+pred_xgb <- predict(xgb_model, newdata = test_data)
+probs_xgb <- predict(xgb_model, newdata = test_data, type = "prob")
+
+# Confusion matrix
+confusionMatrix(pred_xgb, test_data$Death)
+
+# AUC
+library(pROC)
+roc_xgb <- roc(test_data$Death, probs_xgb[,"Yes"])
+auc(roc_xgb)
+
+```
+
+## SVM - radial kernel
+
+```{r, error=TRUE}
+# Carica la libreria per SVM
+library(e1071)
+
+# SVM Model
+svm_model <- svm(Death ~ ., data = train_data, kernel = "radial", probability = TRUE)
+
+# Predizioni per SVM
+pred_svm <- predict(svm_model, newdata = test_data, probability = TRUE)
+probs_svm <- attr(pred_svm, "probabilities")
+
+# SVM Metrics
+confusionMatrix(pred_svm, test_data$Death)
+roc(test_data$Death, probs_svm[, "Yes"])
+
+```
+
+## KNN
+
+```{r, error=TRUE}
+# Carica la libreria per KNN
+library(caret)
+
+# KNN Model
+knn_model <- train(Death ~ ., data = train_data, method = "knn", 
+                   trControl = trainControl(method = "none"), tuneGrid = expand.grid(k = 5))
+
+# Predizioni per KNN
+pred_knn <- predict(knn_model, newdata = test_data)
+probs_knn <- predict(knn_model, newdata = test_data, type = "prob")
+
+# KNN Metrics
+confusionMatrix(pred_knn, test_data$Death)
+roc(test_data$Death, probs_knn[, "Yes"])
+
+```
+
+```{r, error=TRUE}
+# Carica la libreria per KNN
+library(caret)
+
+# KNN Model
+knn_model <- train(Death ~ ., data = train_data, method = "knn", 
+                   trControl = trainControl(method = "none"), tuneGrid = expand.grid(k = 15))
+
+# Predizioni per KNN
+pred_knn <- predict(knn_model, newdata = test_data)
+probs_knn <- predict(knn_model, newdata = test_data, type = "prob")
+
+# KNN Metrics
+confusionMatrix(pred_knn, test_data$Death)
+roc(test_data$Death, probs_knn[, "Yes"])
+
+```
+
+## CONFRONTO MODELLI
+
+```{r}
+# Probabilità della classe positiva
+prob_logit <- pred_prob[,"Yes"]
+prob_rf <- probs_rf[,"Yes"]
+prob_xgb <- probs_xgb[,"Yes"]
+prob_knn <- probs_knn[,"Yes"]
+
+```
+
+
+```{r}
+library(pROC)
+library(caret)
+library(MLmetrics)
+library(PRROC)
+library(dplyr)
+
+# Ground truth
+y_test <- test_data$Death
+y_test <- factor(y_test, levels = c("No", "Yes"))
+
+
+# Logistic Regression
+prob_logit <- pred_prob  # già presente
+class_logit <- pred_class
+
+# Random Forest
+prob_rf <- probs_rf[,"Yes"]
+class_rf <- pred_rf
+
+# XGBoost
+prob_xgb <- probs_xgb[,"Yes"]
+class_xgb <- pred_xgb
+
+# KNN
+prob_knn <- probs_knn[,"Yes"]
+class_knn <- pred_knn
+
+# Funzione per metriche
+calc_metrics <- function(y_true, y_pred, y_prob) {
+  conf <- confusionMatrix(as.factor(y_pred), as.factor(y_true), positive="Yes")
+  roc_obj <- roc(y_true, y_prob, levels=c("No","Yes"))
+  auc <- auc(roc_obj)
+  pr <- pr.curve(scores.class0 = y_prob[y_true == "Yes"], scores.class1 = y_prob[y_true == "No"], curve = FALSE)
+  data.frame(
+    Accuracy = conf$overall["Accuracy"],
+    Sensitivity = conf$byClass["Sensitivity"],
+    Specificity = conf$byClass["Specificity"],
+    Precision = conf$byClass["Precision"],
+    F1 = conf$byClass["F1"],
+    MCC = mcc(y_pred, y_true),
+    AUC = auc,
+    PR_AUC = pr$auc.integral
+  )
+}
+
+# Calcola metriche per ciascun modello
+metrics_logit <- calc_metrics(y_test, class_logit, prob_logit)
+metrics_rf <- calc_metrics(y_test, class_rf, prob_rf)
+metrics_xgb <- calc_metrics(y_test, class_xgb, prob_xgb)
+metrics_knn <- calc_metrics(y_test, class_knn, prob_knn)
+
+# Crea tabella comparativa
+metrics_all <- bind_rows(
+  cbind(Model = "Logistic", metrics_logit),
+  cbind(Model = "Random Forest", metrics_rf),
+  cbind(Model = "XGBoost", metrics_xgb),
+  cbind(Model = "KNN", metrics_knn)
+)
+
+print(metrics_all)
+
+# Controllo y_test: deve essere fattore binario con livelli corretti
+if(!is.factor(y_test)) {
+  y_test <- factor(y_test)
+}
+
+# Assicurati che i livelli siano esattamente "No" e "Yes"
+if(!all(levels(y_test) %in% c("No","Yes"))) {
+  levels(y_test) <- c("No","Yes")
+}
+
+# Assicurati che le predizioni probabilità siano numeriche
+prob_logit <- as.numeric(pred_prob[,"Yes"])
+prob_rf <- as.numeric(probs_rf[,"Yes"])
+prob_xgb <- as.numeric(probs_xgb[,"Yes"])
+prob_knn <- as.numeric(probs_knn[,"Yes"])
+
+# Stampa di controllo per verificare
+print(str(y_test))
+print(str(prob_logit))
+
+# Ora possiamo calcolare ROC senza errori
+roc_logit <- roc(y_test, prob_logit, levels = c("No","Yes"))
+roc_rf <- roc(y_test, prob_rf, levels = c("No","Yes"))
+roc_xgb <- roc(y_test, prob_xgb, levels = c("No","Yes"))
+roc_knn <- roc(y_test, prob_knn, levels = c("No","Yes"))
+
+
+plot(roc_logit, col="blue", lwd=2, main="ROC Curve Comparison")
+plot(roc_rf, col="red", lwd=2, add=TRUE)
+plot(roc_xgb, col="green", lwd=2, add=TRUE)
+plot(roc_knn, col="purple", lwd=2, add=TRUE)
+legend("bottomright", legend=c("Logistic", "Random Forest", "XGBoost", "KNN"),
+       col=c("blue", "red", "green", "purple"), lwd=2)
+
+# Curve Precision-Recall
+pr_logit <- pr.curve(scores.class0=prob_logit[y_test=="Yes"], scores.class1=prob_logit[y_test=="No"], curve=TRUE)
+pr_rf <- pr.curve(scores.class0=prob_rf[y_test=="Yes"], scores.class1=prob_rf[y_test=="No"], curve=TRUE)
+pr_xgb <- pr.curve(scores.class0=prob_xgb[y_test=="Yes"], scores.class1=prob_xgb[y_test=="No"], curve=TRUE)
+pr_knn <- pr.curve(scores.class0=prob_knn[y_test=="Yes"], scores.class1=prob_knn[y_test=="No"], curve=TRUE)
+
+plot(pr_logit$curve, type="l", col="blue", xlab="Recall", ylab="Precision", main="Precision-Recall Curve Comparison")
+lines(pr_rf$curve, col="red")
+lines(pr_xgb$curve, col="green")
+lines(pr_knn$curve, col="purple")
+legend("topright", legend=c("Logistic", "Random Forest", "XGBoost", "KNN"),
+       col=c("blue", "red", "green", "purple"), lwd=2)
+
+```
+
+
