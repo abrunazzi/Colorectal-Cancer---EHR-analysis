@@ -52,9 +52,9 @@ lapply(packages, install_if_missing)
 
 
 ##   OUTPUT
-- `output_dataset.csv`: Cleaned dataset ready for analysis
-- Graphical outputs: Kaplan-Meier plots, clustering visualizations, correlation heatmaps
-- Model summaries and performance reports, analyzed in my report if needed
+- `output_dataset.csv`: Cleaned dataset
+- Graphical outputs: Kaplan-Meier plots, visualizzazioni dei clustering, correlation heatmaps
+- Summary dei modelli e delle performance, analizzate nel mio report se necessario
 
 
 
